@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <title>ゆびシャクトリ レース 🐛</title>
 <meta name="theme-color" content="#bfe9ff" />
 <link rel="manifest" href="./manifest.webmanifest" />
@@ -34,7 +34,7 @@
       linear-gradient(180deg, var(--sky1) 0%, #d7f4ec 45%, var(--sky2) 100%);
     background-attachment:fixed;
     display:flex; flex-direction:column; align-items:center;
-    padding:18px 14px 40px;
+    padding:14px 12px 24px;
   }
   /* drifting clouds */
   body::before{
@@ -48,18 +48,24 @@
   }
   @keyframes drift{from{transform:translateX(-12px)}to{transform:translateX(22px)}}
 
-  header{text-align:center; margin-bottom:14px;}
+  header{text-align:center; margin-bottom:10px;}
   h1{
     font-family:'Mochiy Pop One',sans-serif;
-    font-size:clamp(28px,6vw,46px);
+    font-size:clamp(24px,5vw,40px);
     margin:0;
     color:#5aa01f;
     text-shadow:3px 3px 0 #fff, 5px 5px 0 rgba(90,160,31,.25);
     letter-spacing:1px;
   }
-  .sub{font-size:14px; font-weight:700; color:#6c5a3a; margin-top:4px;}
+  .sub{font-size:13px; font-weight:700; color:#6c5a3a; margin-top:2px;}
 
-  .wrap{width:100%; max-width:920px; display:flex; flex-direction:column; gap:16px;}
+  #rotateHint{
+    display:none; margin:0 0 10px; padding:8px 14px;
+    background:#fff; border:2px dashed #f0c84a; border-radius:14px;
+    font-size:13px; font-weight:700; color:#7a5a12;
+  }
+
+  .wrap{width:100%; max-width:1100px; display:flex; flex-direction:column; gap:12px;}
 
   .card{
     background:var(--cream);
@@ -69,49 +75,71 @@
     position:relative;
   }
 
-  /* ---- game stage ---- */
+  /* ---- game stage (race front & center) ---- */
   #stage{padding:8px; position:relative; overflow:hidden;}
   #gameCanvas{display:block; width:100%; border-radius:20px;}
 
-  .hud{display:flex; gap:10px; padding:0 6px 6px; flex-wrap:wrap;}
-  .chip{
-    flex:1 1 0; min-width:150px;
-    display:flex; align-items:center; gap:10px;
-    background:#fff; border-radius:18px; padding:8px 12px;
-    border:3px solid #f1e6cf;
-    box-shadow:0 4px 0 rgba(120,90,40,.12);
+  /* HUD floats on top of the race canvas */
+  .hud{
+    position:absolute; top:16px; left:16px; right:16px;
+    display:flex; justify-content:space-between; gap:10px;
+    pointer-events:none; z-index:10;
   }
-  .chip .dot{width:22px;height:22px;border-radius:50%;flex:0 0 auto;border:3px solid rgba(0,0,0,.12);}
-  .chip .nm{font-weight:900; font-size:15px;}
-  .chip .cnt{margin-left:auto; font-family:'Mochiy Pop One'; font-size:20px;}
-  .chip .cnt small{font-size:12px; color:#9b8a66; font-family:'Zen Maru Gothic';}
+  .chip{
+    display:flex; align-items:center; gap:8px;
+    background:rgba(255,255,255,.88); border-radius:16px; padding:6px 12px;
+    border:3px solid rgba(241,230,207,.9);
+    box-shadow:0 4px 0 rgba(120,90,40,.12);
+    min-width:0;
+  }
+  .chip .dot{width:18px;height:18px;border-radius:50%;flex:0 0 auto;border:3px solid rgba(0,0,0,.12);}
+  .chip .nm{font-weight:900; font-size:14px; white-space:nowrap;}
+  .chip .cnt{font-family:'Mochiy Pop One'; font-size:18px; white-space:nowrap;}
+  .chip .cnt small{font-size:11px; color:#9b8a66; font-family:'Zen Maru Gothic';}
+  .chip .col{display:flex; flex-direction:column; gap:3px; min-width:0;}
+  .spd{width:70px; height:6px; border-radius:3px; background:#efe7d4; overflow:hidden;}
+  .spd i{display:block; height:100%; width:0%;
+    background:linear-gradient(90deg,#7cc93b,#ffd166,#ff5a5a);
+    border-radius:3px; transition:width .15s;}
 
-  /* ---- bottom row ---- */
-  .row{display:flex; gap:16px; flex-wrap:wrap;}
-  .panel{flex:1 1 280px; padding:14px 16px;}
-  .panel h2{font-family:'Mochiy Pop One'; font-size:17px; margin:2px 0 10px; color:#5aa01f;}
-
-  #camCard{flex:0 0 auto;}
-  .camBox{position:relative; width:288px; height:216px; max-width:100%;
-    border-radius:16px; overflow:hidden; background:#10261f;
-    border:3px solid #f1e6cf;}
+  /* camera picture-in-picture */
+  #pip{
+    position:absolute; right:14px; bottom:14px; z-index:20;
+    width:clamp(120px, 24%, 230px); aspect-ratio:4/3;
+    border-radius:14px; overflow:hidden; background:#10261f;
+    border:3px solid #fff; box-shadow:0 6px 14px rgba(40,30,10,.35);
+    cursor:pointer; transition:width .2s ease;
+  }
+  #pip.mini{width:88px;}
   #previewCanvas{width:100%; height:100%; display:block;}
-  .camBox .tag{position:absolute; left:8px; bottom:8px; font-size:12px; font-weight:700;
-    background:rgba(0,0,0,.55); color:#fff; padding:3px 8px; border-radius:10px;}
+  #pip .tag{position:absolute; left:6px; bottom:6px; font-size:11px; font-weight:700;
+    background:rgba(0,0,0,.55); color:#fff; padding:2px 7px; border-radius:8px;}
   #camHint{position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
-    text-align:center; color:#cfe9dd; font-weight:700; font-size:14px; padding:16px;}
+    text-align:center; color:#cfe9dd; font-weight:700; font-size:11px; padding:8px;}
 
-  /* controls */
-  .seg{display:flex; gap:8px; margin-bottom:14px; flex-wrap:wrap;}
+  /* stage corner buttons (above the overlay so sound/fullscreen always work) */
+  .stageBtns{position:absolute; left:16px; bottom:16px; z-index:40; display:flex; gap:8px;}
+  .iconBtn{
+    width:44px; height:44px; border-radius:50%; cursor:pointer;
+    border:3px solid #fff; background:rgba(255,248,232,.92);
+    font-size:19px; line-height:1; display:flex; align-items:center; justify-content:center;
+    box-shadow:0 4px 0 rgba(120,90,40,.18);
+    transition:transform .08s;
+  }
+  .iconBtn:active{transform:translateY(3px);}
+
+  /* settings inside the modal */
+  .setBox{background:#fff; border:2px dashed #e7d9b8; border-radius:16px;
+    padding:12px 14px; margin:12px 0; text-align:left;}
+  .seg{display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;}
   .seg button{
-    flex:1 1 0; min-width:110px; cursor:pointer;
-    font-family:'Zen Maru Gothic'; font-weight:900; font-size:14px;
-    padding:10px 8px; border-radius:14px; border:3px solid #e7d9b8; background:#fff; color:#7a6a44;
+    flex:1 1 0; min-width:90px; cursor:pointer;
+    font-family:'Zen Maru Gothic'; font-weight:900; font-size:13px;
+    padding:9px 6px; border-radius:14px; border:3px solid #e7d9b8; background:#fff; color:#7a6a44;
     transition:transform .08s, background .15s;
   }
   .seg button:active{transform:translateY(2px);}
   .seg button.on{background:#ffe9a8; color:#7a5a12; border-color:#f0c84a; box-shadow:0 3px 0 #e0b53a;}
-
   label.fld{display:block; font-weight:700; font-size:13px; margin:0 0 6px;}
   input[type=range]{width:100%; accent-color:#7cc93b;}
   .hintsm{font-size:12px; color:#9b8a66; margin-top:4px;}
@@ -119,7 +147,7 @@
   /* big buttons */
   .btn{
     cursor:pointer; border:none; font-family:'Mochiy Pop One';
-    font-size:20px; color:#fff; padding:14px 22px; border-radius:18px;
+    font-size:19px; color:#fff; padding:13px 22px; border-radius:18px;
     background:linear-gradient(180deg,#86d24a,#5aa01f);
     box-shadow:0 6px 0 #45801a, 0 10px 16px rgba(70,120,20,.35);
     transition:transform .08s, box-shadow .08s;
@@ -129,21 +157,42 @@
   .btn:disabled{filter:grayscale(.6) opacity(.6); cursor:default;}
 
   /* overlay */
-  #overlay{position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
-    background:rgba(30,40,30,.42); backdrop-filter:blur(2px); border-radius:20px; padding:18px; text-align:center;}
+  #overlay{position:absolute; inset:0; z-index:30; display:flex; align-items:center; justify-content:center;
+    background:rgba(30,40,30,.42); backdrop-filter:blur(2px); border-radius:20px;
+    padding:16px 16px 70px; text-align:center;}  /* bottom space clears the corner buttons */
   #overlay.hidden{display:none;}
-  .modal{background:var(--cream); border:4px solid #fff; border-radius:24px; padding:22px 24px;
-    max-width:420px; width:100%; box-shadow:0 14px 30px rgba(40,30,10,.3);}
-  .modal h3{font-family:'Mochiy Pop One'; font-size:24px; margin:0 0 8px; color:#5aa01f;}
+  #overlay.count{background:rgba(20,30,20,.14); backdrop-filter:none;}
+  .modal{background:var(--cream); border:4px solid #fff; border-radius:24px; padding:20px 22px;
+    max-width:440px; width:100%; max-height:100%; overflow-y:auto;
+    box-shadow:0 14px 30px rgba(40,30,10,.3);}
+  #overlay.count .modal{background:transparent; border:none; box-shadow:none; overflow:visible;}
+  .modal h3{font-family:'Mochiy Pop One'; font-size:23px; margin:0 0 8px; color:#5aa01f;}
   .modal p{font-size:14px; line-height:1.7; margin:6px 0;}
-  .countNum{font-family:'Mochiy Pop One'; font-size:120px; color:#fff;
-    text-shadow:0 6px 0 rgba(0,0,0,.25); animation:pop .9s ease;}
-  @keyframes pop{0%{transform:scale(.3);opacity:0}40%{transform:scale(1.15);opacity:1}100%{transform:scale(1)}}
-  .winLine{font-family:'Mochiy Pop One'; font-size:30px; margin:6px 0 12px;}
+  .countNum{font-family:'Mochiy Pop One'; font-size:130px; color:#fff;
+    text-shadow:0 8px 0 rgba(0,0,0,.25); animation:pop .8s ease;}
+  @keyframes pop{0%{transform:scale(.3);opacity:0}40%{transform:scale(1.18);opacity:1}100%{transform:scale(1)}}
+  .winLine{font-family:'Mochiy Pop One'; font-size:30px; margin:6px 0 12px; animation:pop .6s ease;}
   .err{color:#c0392b; font-weight:700;}
   .howto{font-size:13px; text-align:left; background:#fff; border-radius:14px; padding:12px 14px; margin:12px 0; border:2px dashed #e7d9b8;}
   .howto b{color:#5aa01f;}
-  .foot{font-size:12px; color:#9b8a66; text-align:center; margin-top:6px;}
+  .foot{font-size:11px; color:#9b8a66; text-align:center;}
+
+  /* ---- landscape: race screen fills the view ---- */
+  @media (orientation:landscape) and (max-height:600px){
+    body{padding:8px 10px 10px;}
+    header, .foot, #rotateHint{display:none;}
+    .wrap{gap:8px;}
+  }
+  @media (orientation:portrait) and (max-width:640px){
+    #rotateHint{display:block;}
+    .modal{padding:14px 16px;}
+    .modal h3{font-size:19px;}
+    .modal p{font-size:13px;}
+    .howto{font-size:12px; padding:10px 12px; margin:8px 0;}
+    .btn{font-size:17px; padding:11px 18px;}
+  }
+  /* fullscreen stage */
+  #stage:fullscreen{border-radius:0; border:none; display:flex; flex-direction:column; justify-content:center; background:var(--cream);}
 </style>
 </head>
 <body>
@@ -153,55 +202,43 @@
 </header>
 
 <div class="wrap">
-  <!-- GAME -->
+  <div id="rotateHint">📱 スマホは <b>よこ向き</b> にすると大画面であそべるよ！</div>
+
+  <!-- GAME (front & center) -->
   <div class="card" id="stage">
     <canvas id="gameCanvas"></canvas>
+
     <div class="hud">
       <div class="chip"><span class="dot" id="dot1" style="background:var(--p1)"></span>
-        <span class="nm" id="nm1">あなた</span>
+        <span class="col">
+          <span class="nm" id="nm1">あなた</span>
+          <span class="spd"><i id="spd1"></i></span>
+        </span>
         <span class="cnt"><span id="cnt1">0</span><small> / <span id="goal1">20</span></small></span></div>
       <div class="chip"><span class="dot" id="dot2" style="background:var(--cpu)"></span>
-        <span class="nm" id="nm2">CPU</span>
+        <span class="col">
+          <span class="nm" id="nm2">CPU</span>
+          <span class="spd"><i id="spd2"></i></span>
+        </span>
         <span class="cnt"><span id="cnt2">0</span><small> / <span id="goal2">20</span></small></span></div>
+    </div>
+
+    <!-- camera PiP (tap to shrink / grow) -->
+    <div id="pip" title="タップで大きさをかえる">
+      <canvas id="previewCanvas" width="576" height="432"></canvas>
+      <div id="camHint">カメラを開始すると<br>ここに手がうつるよ</div>
+      <div class="tag" id="camTag" style="display:none">手をうつしてね</div>
+    </div>
+
+    <div class="stageBtns">
+      <button class="iconBtn" id="sndBtn" title="サウンド">🔊</button>
+      <button class="iconBtn" id="setBtn" title="せってい">⚙️</button>
+      <button class="iconBtn" id="fsBtn" title="ぜんがめん">⛶</button>
     </div>
 
     <!-- overlay (menu / countdown / result / error) -->
     <div id="overlay">
       <div class="modal" id="modal"></div>
-    </div>
-  </div>
-
-  <!-- BOTTOM ROW -->
-  <div class="row">
-    <div class="card panel" id="camCard">
-      <h2>📷 カメラ</h2>
-      <div class="camBox">
-        <canvas id="previewCanvas" width="576" height="432"></canvas>
-        <div id="camHint">「カメラを開始」を押すと<br>ここに手がうつります</div>
-        <div class="tag" id="camTag" style="display:none">手をうつしてね</div>
-      </div>
-    </div>
-
-    <div class="card panel" id="setCard">
-      <h2>⚙️ せってい</h2>
-      <label class="fld">あそびかた</label>
-      <div class="seg" id="modeSeg">
-        <button data-mode="cpu" class="on">🤖 ひとり (CPU対戦)</button>
-        <button data-mode="2p">👫 ふたり対戦 (両手)</button>
-      </div>
-
-      <div id="diffWrap">
-        <label class="fld">CPUのつよさ</label>
-        <div class="seg" id="diffSeg">
-          <button data-diff="easy">やさしい</button>
-          <button data-diff="normal" class="on">ふつう</button>
-          <button data-diff="hard">つよい</button>
-        </div>
-      </div>
-
-      <label class="fld">指の感度（右ほど少しの曲げでOK）：<span id="sensVal">6</span></label>
-      <input type="range" id="sens" min="1" max="10" value="6" />
-      <div class="hintsm">うまく進まないときは感度を上げてね。</div>
     </div>
   </div>
 
@@ -212,16 +249,17 @@
 </div>
 
 <script type="module">
-import { HandLandmarker, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14";
-
+const VISION_CDN = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14";
 const MODEL = "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task";
 const WASM  = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm";
 
 /* ---------- elements ---------- */
+const stage = document.getElementById('stage');
 const gc = document.getElementById('gameCanvas');
 const gctx = gc.getContext('2d');
 const pv = document.getElementById('previewCanvas');
 const pctx = pv.getContext('2d');
+const pip = document.getElementById('pip');
 const overlay = document.getElementById('overlay');
 const modal = document.getElementById('modal');
 const camHint = document.getElementById('camHint');
@@ -230,9 +268,85 @@ const camTag = document.getElementById('camTag');
 const video = document.createElement('video');
 video.playsInline = true; video.muted = true;
 
+/* ---------- pop sound engine (WebAudio, no assets) ---------- */
+const SFX = (() => {
+  let ctx = null, master = null;
+  let muted = localStorage.getItem('shakutori-muted') === '1';
+  function ensure(){
+    if(!ctx){
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if(!AC) return null;
+      ctx = new AC();
+      master = ctx.createGain(); master.gain.value = 0.55;
+      master.connect(ctx.destination);
+    }
+    if(ctx.state === 'suspended') ctx.resume();
+    return ctx;
+  }
+  function tone({f=440, f2=null, t=0.12, type='sine', v=0.25, when=0}){
+    if(muted || !ensure()) return;
+    const t0 = ctx.currentTime + when;
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = type;
+    o.frequency.setValueAtTime(f, t0);
+    if(f2) o.frequency.exponentialRampToValueAtTime(Math.max(20,f2), t0 + t);
+    g.gain.setValueAtTime(v, t0);
+    g.gain.exponentialRampToValueAtTime(0.001, t0 + t);
+    o.connect(g); g.connect(master);
+    o.start(t0); o.stop(t0 + t + 0.03);
+  }
+  function noise({t=0.25, v=0.2, when=0, freq=2000, q=0.8}){
+    if(muted || !ensure()) return;
+    const t0 = ctx.currentTime + when;
+    const len = Math.ceil(ctx.sampleRate * t);
+    const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    for(let i=0;i<len;i++) d[i] = Math.random()*2-1;
+    const src = ctx.createBufferSource(); src.buffer = buf;
+    const bp = ctx.createBiquadFilter(); bp.type='bandpass'; bp.frequency.value=freq; bp.Q.value=q;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(v, t0);
+    g.gain.exponentialRampToValueAtTime(0.001, t0 + t);
+    src.connect(bp); bp.connect(g); g.connect(master);
+    src.start(t0); src.stop(t0 + t);
+  }
+  return {
+    ensure,
+    get muted(){ return muted; },
+    toggle(){ muted = !muted; localStorage.setItem('shakutori-muted', muted?'1':'0'); return muted; },
+    click(){ tone({f:620, f2:920, t:0.07, type:'triangle', v:0.16}); },
+    /* one hop — pitch pops up with speed */
+    step(sp){
+      const m = 1 + sp*0.9;
+      tone({f:340*m, f2:660*m, t:0.09, type:'triangle', v:0.24});
+      tone({f:170*m, f2:120, t:0.06, type:'sine', v:0.12});
+    },
+    cpuStep(){ tone({f:230, f2:300, t:0.05, type:'sine', v:0.06}); },
+    /* speed tier up — quick rising jingle */
+    tier(lv){
+      tone({f:520+lv*120, f2:780+lv*160, t:0.08, type:'square', v:0.12});
+      tone({f:780+lv*160, f2:1100+lv*200, t:0.11, type:'square', v:0.12, when:0.07});
+    },
+    count(){ tone({f:660, t:0.13, type:'square', v:0.16}); },
+    go(){
+      tone({f:660, f2:1320, t:0.28, type:'square', v:0.18});
+      tone({f:990, f2:1980, t:0.28, type:'triangle', v:0.14, when:0.03});
+    },
+    win(){
+      [523,659,784,1046,1319].forEach((f,i)=> tone({f, t:0.22, type:'triangle', v:0.2, when:i*0.09}));
+      tone({f:1568, t:0.5, type:'triangle', v:0.16, when:0.48});
+      noise({t:0.6, v:0.1, freq:3000, q:0.6, when:0.1});
+    },
+    lose(){ [440,349,262].forEach((f,i)=> tone({f, f2:f*0.92, t:0.26, type:'sine', v:0.18, when:i*0.18})); },
+    goal(){ noise({t:0.35, v:0.22, freq:2400, q:0.7}); tone({f:880, f2:1760, t:0.3, type:'triangle', v:0.2}); },
+  };
+})();
+document.addEventListener('pointerdown', ()=>SFX.ensure(), {once:true});
+
 /* ---------- game state ---------- */
 const HAND_CONNECTIONS=[[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],[9,13],[13,14],[14,15],[15,16],[13,17],[17,18],[18,19],[19,20],[0,17]];
 const cpuRates={easy:0.8, normal:1.3, hard:1.9};
+const TIER_MSG=['','はやい！','すごい!!','サイコー!!!'];
 
 const game={
   state:'init',          // init | ready | countdown | racing | finished
@@ -243,12 +357,14 @@ const game={
   winner:null,
   countdownVal:3,
   players:{
-    1:{steps:0, ema:170, closed:false, scrunch:0, seen:false, isCPU:false, cpuAccum:0, landmarks:null, name:'あなた', color:'--p1', dark:'--p1d'},
-    2:{steps:0, ema:170, closed:false, scrunch:0, seen:false, isCPU:true,  cpuAccum:0, landmarks:null, name:'CPU',   color:'--cpu', dark:'--cpud'}
+    1:{steps:0, ema:170, closed:false, scrunch:0, seen:false, isCPU:false, cpuAccum:0, landmarks:null, name:'あなた', color:'--p1', dark:'--p1d',
+       px:null, hop:0, speed:0, tier:0, stepTimes:[]},
+    2:{steps:0, ema:170, closed:false, scrunch:0, seen:false, isCPU:true,  cpuAccum:0, landmarks:null, name:'CPU',   color:'--cpu', dark:'--cpud',
+       px:null, hop:0, speed:0, tier:0, stepTimes:[]}
   }
 };
 let landmarker=null, lastResults=null, lastVideoTime=-1, lastTime=0;
-let confetti=[];
+let confetti=[], parts=[], shake=0;
 
 /* ---------- math helpers ---------- */
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
@@ -262,25 +378,35 @@ function angleDeg(a,b,c){
 const indexAngle=lm=>angleDeg(lm[5],lm[6],lm[8]);
 const cssv=v=>getComputedStyle(document.documentElement).getPropertyValue(v).trim();
 
-/* ---------- layout ---------- */
+/* ---------- layout (landscape aware) ---------- */
 let GW=0,GH=0,gDpr=1, L={};
 function resizeGame(){
-  const rect=gc.parentElement.getBoundingClientRect();
-  const cssW=Math.max(280, rect.width-16);
-  const cssH=clamp(cssW*0.42, 250, 360);
+  const cssW=Math.max(280, stage.clientWidth-16);
+  const isLandscape = window.innerWidth > window.innerHeight;
+  let cssH;
+  if(isLandscape){
+    // fill as much vertical space as possible — the race takes the whole view
+    const avail = window.innerHeight - stage.getBoundingClientRect().top - 26;
+    cssH = clamp(avail, 240, 640);
+  }else{
+    const avail = window.innerHeight - stage.getBoundingClientRect().top - 120;
+    cssH = clamp(Math.max(cssW*0.62, avail*0.72), 300, 460);
+  }
   gDpr=window.devicePixelRatio||1;
   gc.width=Math.round(cssW*gDpr); gc.height=Math.round(cssH*gDpr);
   gc.style.height=cssH+'px';
   gctx.setTransform(gDpr,0,0,gDpr,0,0);
   GW=cssW; GH=cssH;
-  const pad=18;
+  const pad=Math.max(18, GH*0.06);
   L.startX=pad+72;
   L.finishX=GW-pad-30;
   L.laneH=(GH-pad*2)/2;
   L.lane1Y=pad+L.laneH*0.5;
   L.lane2Y=pad+L.laneH*1.5;
 }
-window.addEventListener('resize', ()=>{resizeGame();});
+window.addEventListener('resize', resizeGame);
+window.addEventListener('orientationchange', ()=>setTimeout(resizeGame,150));
+document.addEventListener('fullscreenchange', ()=>setTimeout(resizeGame,50));
 
 /* ---------- detection -> players ---------- */
 function applyHand(pid, lm){
@@ -295,7 +421,7 @@ function applyHand(pid, lm){
   const open  = close + 22;                // need to straighten above this
   if(game.state==='racing' && !p.isCPU){
     if(!p.closed && p.ema < close){ p.closed=true; }
-    else if(p.closed && p.ema > open){ p.closed=false; p.steps++; }
+    else if(p.closed && p.ema > open){ p.closed=false; p.steps++; onStep(pid); }
   }
 }
 function updateHands(){
@@ -314,13 +440,67 @@ function updateHands(){
   }
 }
 
+/* ---------- speed & step effects ---------- */
+function calcSpeed(p, now){
+  p.stepTimes = p.stepTimes.filter(t=>now-t<1600);
+  return clamp((p.stepTimes.length/1.6)/3, 0, 1);
+}
+function wormPos(p, laneY){
+  const progress = clamp(p.steps/game.stepsToWin, 0, 1);
+  const target = L.startX + progress*(L.finishX-L.startX) - 35;
+  if(p.px===null) p.px=target;
+  return {x:p.px, y:laneY+10, target};
+}
+function onStep(pid){
+  const now=performance.now();
+  const p=game.players[pid];
+  p.hop=1;
+  p.stepTimes.push(now);
+  const sp=calcSpeed(p, now);
+  const laneY = pid===1 ? L.lane1Y : L.lane2Y;
+  const {x,y}=wormPos(p, laneY);
+  const dark=cssv(p.dark), col=cssv(p.color);
+  // dust burst behind the worm
+  const n = 3 + Math.round(sp*5);
+  for(let i=0;i<n;i++){
+    parts.push({type:'dust', x:x+Math.random()*20, y:y+6,
+      vx:-(30+Math.random()*60+sp*120), vy:-(10+Math.random()*40), g:60,
+      life:0.4+Math.random()*0.3, max:0.7, r:2.5+Math.random()*3.5,
+      c:['#caa06a','#e0c290','#b98d55'][i%3]});
+  }
+  // +1 pop text
+  parts.push({type:'text', x:x+50, y:y-34, vx:0, vy:-46, g:0,
+    life:0.7, max:0.7, text:'+1', c:dark, size:15});
+  // sparks when going fast
+  if(sp>0.6){
+    for(let i=0;i<5;i++){
+      parts.push({type:'spark', x:x+30, y:y-6,
+        vx:(Math.random()-0.5)*180, vy:-(30+Math.random()*120), g:220,
+        life:0.5, max:0.5, r:2+Math.random()*2, c:col});
+    }
+  }
+  // sound & tier shout-outs
+  if(p.isCPU){ SFX.cpuStep(); }
+  else{
+    SFX.step(sp);
+    const tier = sp>0.85?3 : sp>0.6?2 : sp>0.35?1 : 0;
+    if(tier>p.tier){
+      SFX.tier(tier);
+      parts.push({type:'text', x:x+35, y:y-52, vx:0, vy:-34, g:0,
+        life:1.0, max:1.0, text:TIER_MSG[tier], c:'#ff5a5a', size:19});
+      if(tier>=2) shake=Math.max(shake,3);
+    }
+    p.tier=tier;
+  }
+}
+
 /* ---------- race step ---------- */
 function stepRace(dt, now){
   for(const pid of [1,2]){
     const p=game.players[pid];
     if(p.isCPU){
       p.cpuAccum += cpuRates[game.difficulty]*dt*(0.85+Math.random()*0.3);
-      while(p.cpuAccum>=1){ p.cpuAccum-=1; p.steps++; }
+      while(p.cpuAccum>=1){ p.cpuAccum-=1; p.steps++; onStep(pid); }
       p.scrunch = 0.5+0.5*Math.sin(now/170);
     }
     if(p.steps>=game.stepsToWin && game.winner===null){
@@ -331,16 +511,52 @@ function stepRace(dt, now){
   }
 }
 
+/* ---------- per-frame animation state ---------- */
+function updateAnim(dt, now){
+  for(const pid of [1,2]){
+    const p=game.players[pid];
+    const laneY = pid===1 ? L.lane1Y : L.lane2Y;
+    const {target}=wormPos(p, laneY);
+    // ease toward target so acceleration is visible
+    p.px += (target-p.px)*Math.min(1, dt*7);
+    // hop decay
+    p.hop = Math.max(0, p.hop - dt*4.5);
+    // smoothed speed for effects & HUD
+    const sp = calcSpeed(p, now);
+    p.speed += (sp - p.speed)*Math.min(1, dt*5);
+    if(game.state==='racing' && p.speed<0.15) p.tier=0;
+    // speed lines while fast
+    if(game.state==='racing' && p.speed>0.5 && Math.random()<dt*(10*p.speed)){
+      parts.push({type:'line', x:p.px+90+Math.random()*60, y:laneY-8+(Math.random()-0.5)*L.laneH*0.5,
+        vx:-(320+320*p.speed), vy:0, g:0, life:0.3, max:0.3, len:26+Math.random()*22, c:'#ffffff'});
+    }
+  }
+  // particles
+  for(const c of parts){
+    c.life-=dt;
+    c.x+=c.vx*dt; c.y+=c.vy*dt;
+    if(c.g) c.vy+=c.g*dt;
+  }
+  parts=parts.filter(c=>c.life>0);
+  if(parts.length>400) parts.splice(0, parts.length-400);
+}
+
 /* ---------- drawing the worm ---------- */
-function drawWorm(ctx, x, baseY, scrunch, colHex, darkHex, isCPU){
+function drawWorm(ctx, x, baseY, scrunch, colHex, darkHex, isCPU, hop=0, glow=0, noShadow=false){
   const len  = lerp(70, 38, scrunch);
-  const arch = lerp(3, 26, scrunch);
+  const arch = lerp(3, 26, scrunch) + hop*10;
   const segs = 8, r=10;
+  const lift = hop*5;
+  baseY -= lift;
   // shadow
+  if(!noShadow){
+    ctx.save();
+    ctx.fillStyle='rgba(50,40,15,.16)';
+    ctx.beginPath(); ctx.ellipse(x+len*0.5, baseY+9+lift, len*0.55, 6, 0,0,Math.PI*2); ctx.fill();
+    ctx.restore();
+  }
   ctx.save();
-  ctx.fillStyle='rgba(50,40,15,.16)';
-  ctx.beginPath(); ctx.ellipse(x+len*0.5, baseY+9, len*0.55, 6, 0,0,Math.PI*2); ctx.fill();
-  ctx.restore();
+  if(glow>0.55){ ctx.shadowColor=colHex; ctx.shadowBlur=22*glow; }
   // body segments along an arched spine (head at +x)
   for(let i=0;i<=segs;i++){
     const t=i/segs;
@@ -355,6 +571,7 @@ function drawWorm(ctx, x, baseY, scrunch, colHex, darkHex, isCPU){
     ctx.beginPath(); ctx.arc(px-rr*0.3,py-rr*0.3,rr*0.35,0,Math.PI*2);
     ctx.fillStyle='rgba(255,255,255,.35)'; ctx.fill();
   }
+  ctx.restore();
   // head at front
   const hx=x+len, hy=baseY;
   const hr=12.5;
@@ -400,17 +617,22 @@ function drawLane(yc, p, key){
   for(let gx=x0+18; gx<x1-18; gx+=46){
     grass(gx, yc-h/2+10);
   }
-  // start post
-  gctx.fillStyle='#9b8a66';
   // finish line (checker)
   drawFinish(L.finishX, yc, h);
-  // worm
-  const progress = clamp(p.steps/game.stepsToWin, 0, 1);
-  const wx = L.startX + progress*(L.finishX-L.startX) - 35;
-  drawWorm(gctx, wx, yc+10, p.scrunch, cssv(p.color), cssv(p.dark), p.isCPU);
+  // worm (+ speed ghost trail)
+  const {x:wx}=wormPos(p, yc);
+  const col=cssv(p.color), dark=cssv(p.dark);
+  if(p.speed>0.4){
+    for(let g=2; g>=1; g--){
+      gctx.globalAlpha=0.10*p.speed*(3-g);
+      drawWorm(gctx, wx-g*16*p.speed, yc+10, p.scrunch, col, dark, p.isCPU, p.hop, 0, true);
+    }
+    gctx.globalAlpha=1;
+  }
+  drawWorm(gctx, wx, yc+10, p.scrunch, col, dark, p.isCPU, p.hop, p.speed);
   // name flag at left
   gctx.font="700 13px 'Zen Maru Gothic'";
-  gctx.fillStyle=cssv(p.dark);
+  gctx.fillStyle=dark;
   gctx.textBaseline='middle';
   gctx.fillText(key, x0+6, yc-h/2+12);
 }
@@ -441,14 +663,50 @@ function roundRect(x,y,w,h,r){
   gctx.arcTo(x,y+h,x,y,r); gctx.arcTo(x,y,x+w,y,r); gctx.closePath();
 }
 
+function drawParticles(){
+  for(const c of parts){
+    const a=clamp(c.life/c.max,0,1);
+    if(c.type==='dust'){
+      gctx.globalAlpha=a*0.6;
+      gctx.fillStyle=c.c;
+      gctx.beginPath(); gctx.arc(c.x,c.y,c.r*(0.6+a*0.6),0,Math.PI*2); gctx.fill();
+    }else if(c.type==='spark'){
+      gctx.globalAlpha=a;
+      gctx.fillStyle=c.c;
+      gctx.save(); gctx.translate(c.x,c.y); gctx.rotate(c.life*8);
+      gctx.fillRect(-c.r,-c.r,c.r*2,c.r*2); gctx.restore();
+    }else if(c.type==='line'){
+      gctx.globalAlpha=a*0.55;
+      gctx.strokeStyle=c.c; gctx.lineWidth=2.5; gctx.lineCap='round';
+      gctx.beginPath(); gctx.moveTo(c.x,c.y); gctx.lineTo(c.x+c.len,c.y); gctx.stroke();
+    }else if(c.type==='text'){
+      gctx.globalAlpha=a;
+      gctx.font=`900 ${c.size}px 'Mochiy Pop One'`;
+      gctx.textAlign='center'; gctx.textBaseline='middle';
+      gctx.lineWidth=4; gctx.strokeStyle='#fff';
+      gctx.strokeText(c.text, c.x, c.y);
+      gctx.fillStyle=c.c;
+      gctx.fillText(c.text, c.x, c.y);
+      gctx.textAlign='start';
+    }
+  }
+  gctx.globalAlpha=1;
+}
+
 function drawGame(now, dt){
   gctx.clearRect(0,0,GW,GH);
+  gctx.save();
+  if(shake>0.3){
+    gctx.translate((Math.random()-0.5)*shake, (Math.random()-0.5)*shake);
+  }
+  shake*=Math.pow(0.001, dt); // fast decay
   // sky inside canvas
   const sky=gctx.createLinearGradient(0,0,0,GH);
   sky.addColorStop(0,'#cdeeff'); sky.addColorStop(1,'#eafbe1');
-  gctx.fillStyle=sky; gctx.fillRect(0,0,GW,GH);
+  gctx.fillStyle=sky; gctx.fillRect(-10,-10,GW+20,GH+20);
   drawLane(L.lane1Y, game.players[1], '1P');
   drawLane(L.lane2Y, game.players[2], game.mode==='2p'?'2P':'CPU');
+  drawParticles();
 
   // confetti on finish
   if(game.state==='finished'){
@@ -459,6 +717,7 @@ function drawGame(now, dt){
     });
     confetti=confetti.filter(c=>c.y<GH+20);
   }
+  gctx.restore();
 }
 
 /* ---------- preview ---------- */
@@ -508,6 +767,7 @@ function loop(){
     updateHands();
   }
   if(game.state==='racing') stepRace(dt, now);
+  updateAnim(dt, now);
   drawPreview();
   drawGame(now, dt);
   updateHUD();
@@ -523,20 +783,49 @@ function updateHUD(){
   document.getElementById('nm1').textContent=game.players[1].name;
   document.getElementById('nm2').textContent=game.players[2].name;
   document.getElementById('dot2').style.background=cssv(game.players[2].color);
+  document.getElementById('spd1').style.width=(game.players[1].speed*100)+'%';
+  document.getElementById('spd2').style.width=(game.players[2].speed*100)+'%';
 }
 
-function showOverlay(html){ modal.innerHTML=html; overlay.classList.remove('hidden'); bindModal(); }
+function showOverlay(html, cls){
+  modal.innerHTML=html;
+  overlay.classList.remove('hidden','count');
+  if(cls) overlay.classList.add(cls);
+  bindModal();
+}
 function hideOverlay(){ overlay.classList.add('hidden'); }
 
+function settingsHTML(){
+  const m=game.mode, d=game.difficulty;
+  return `<div class="setBox">
+    <label class="fld">あそびかた</label>
+    <div class="seg" id="modeSeg">
+      <button data-mode="cpu" class="${m==='cpu'?'on':''}">🤖 ひとり (CPU対戦)</button>
+      <button data-mode="2p" class="${m==='2p'?'on':''}">👫 ふたり対戦</button>
+    </div>
+    <div id="diffWrap" style="display:${m==='cpu'?'block':'none'}">
+      <label class="fld">CPUのつよさ</label>
+      <div class="seg" id="diffSeg">
+        <button data-diff="easy" class="${d==='easy'?'on':''}">やさしい</button>
+        <button data-diff="normal" class="${d==='normal'?'on':''}">ふつう</button>
+        <button data-diff="hard" class="${d==='hard'?'on':''}">つよい</button>
+      </div>
+    </div>
+    <label class="fld">指の感度（右ほど少しの曲げでOK）：<span id="sensVal">${game.sensitivity}</span></label>
+    <input type="range" id="sens" min="1" max="10" value="${game.sensitivity}" />
+    <div class="hintsm">うまく進まないときは感度を上げてね。</div>
+  </div>`;
+}
 function menuHTML(){
   if(game.state==='init'){
     return `<h3>レースをはじめよう！</h3>
       <div class="howto">
         <p>① <b>カメラを開始</b> を押して手をうつす<br>
         ② 人差し指を <b>「ギュッと曲げて → ピンと伸ばす」</b><br>
-        ③ 1回で1歩！ さきにゴールしたシャクトリムシの勝ち 🏁</p>
+        ③ 1回で1歩！ はやく動かすと <b>加速エフェクト</b> 🔥<br>
+        ④ さきにゴールしたシャクトリムシの勝ち 🏁</p>
       </div>
-      <p style="font-size:13px;color:#9b8a66">右の「せってい」で人数や感度を変えられます。</p>
+      <p style="font-size:12px;color:#9b8a66">📱 スマホはよこ向きがおすすめ！</p>
       <button class="btn" id="primaryBtn" style="margin-top:8px">🎥 カメラを開始</button>`;
   }
   if(game.state==='ready'){
@@ -545,7 +834,8 @@ function menuHTML(){
       : '片手をうつして、CPUと勝負！';
     return `<h3>じゅんびOK！</h3>
       <p>${m}</p>
-      <button class="btn" id="primaryBtn" style="margin-top:10px">🏁 レーススタート</button>`;
+      <button class="btn" id="primaryBtn">🏁 レーススタート</button>
+      ${settingsHTML()}`;
   }
   return '';
 }
@@ -569,10 +859,33 @@ function resultHTML(){
 
 function bindModal(){
   const pb=document.getElementById('primaryBtn');
-  if(pb) pb.onclick=()=>{ game.state==='init' ? initSystem() : startCountdown(); };
-  const rb=document.getElementById('retryBtn'); if(rb) rb.onclick=initSystem;
-  const ag=document.getElementById('againBtn'); if(ag) ag.onclick=startCountdown;
-  const bk=document.getElementById('backBtn'); if(bk) bk.onclick=()=>{ game.state='ready'; showOverlay(menuHTML()); };
+  if(pb) pb.onclick=()=>{ SFX.click(); game.state==='init' ? initSystem() : startCountdown(); };
+  const rb=document.getElementById('retryBtn'); if(rb) rb.onclick=()=>{ SFX.click(); initSystem(); };
+  const ag=document.getElementById('againBtn'); if(ag) ag.onclick=()=>{ SFX.click(); startCountdown(); };
+  const bk=document.getElementById('backBtn'); if(bk) bk.onclick=()=>{ SFX.click(); game.state='ready'; showOverlay(menuHTML()); };
+  // settings inside modal
+  const modeSeg=document.getElementById('modeSeg');
+  if(modeSeg) modeSeg.addEventListener('click',e=>{
+    const b=e.target.closest('button'); if(!b) return;
+    SFX.click();
+    modeSeg.querySelectorAll('button').forEach(x=>x.classList.remove('on'));
+    b.classList.add('on'); game.mode=b.dataset.mode;
+    const dw=document.getElementById('diffWrap');
+    if(dw) dw.style.display = game.mode==='cpu'?'block':'none';
+    configurePlayers();
+  });
+  const diffSeg=document.getElementById('diffSeg');
+  if(diffSeg) diffSeg.addEventListener('click',e=>{
+    const b=e.target.closest('button'); if(!b) return;
+    SFX.click();
+    diffSeg.querySelectorAll('button').forEach(x=>x.classList.remove('on'));
+    b.classList.add('on'); game.difficulty=b.dataset.diff;
+  });
+  const sens=document.getElementById('sens');
+  if(sens) sens.addEventListener('input',()=>{
+    game.sensitivity=+sens.value;
+    const sv=document.getElementById('sensVal'); if(sv) sv.textContent=sens.value;
+  });
 }
 
 /* ---------- system init (camera + model) ---------- */
@@ -586,6 +899,7 @@ async function initSystem(){
     showOverlay(errorHTML('カメラを開始できませんでした。'+ (e.message||''))); return;
   }
   try{
+    const { HandLandmarker, FilesetResolver } = await import(VISION_CDN);
     const vision=await FilesetResolver.forVisionTasks(WASM);
     try{
       landmarker=await HandLandmarker.createFromOptions(vision,{baseOptions:{modelAssetPath:MODEL,delegate:'GPU'},runningMode:'VIDEO',numHands:2});
@@ -603,9 +917,10 @@ async function initSystem(){
 function resetPlayers(){
   configurePlayers();
   for(const pid of [1,2]){
-    Object.assign(game.players[pid], {steps:0, closed:false, cpuAccum:0, ema:170, scrunch:0});
+    Object.assign(game.players[pid], {steps:0, closed:false, cpuAccum:0, ema:170, scrunch:0,
+      px:null, hop:0, speed:0, tier:0, stepTimes:[]});
   }
-  game.winner=null; confetti=[];
+  game.winner=null; confetti=[]; parts=[]; shake=0;
 }
 function configurePlayers(){
   if(game.mode==='2p'){
@@ -623,18 +938,33 @@ function startCountdown(){
   resetPlayers();
   game.state='countdown'; game.countdownVal=3;
   const tick=()=>{
+    if(game.state!=='countdown') return;
     if(game.countdownVal>0){
-      showOverlay(`<div class="countNum" key="${game.countdownVal}">${game.countdownVal}</div>`);
+      SFX.count();
+      showOverlay(`<div class="countNum" key="${game.countdownVal}">${game.countdownVal}</div>`, 'count');
       game.countdownVal--; setTimeout(tick,800);
     }else{
-      showOverlay(`<div class="countNum" style="color:#ffe46b">GO!</div>`);
-      setTimeout(()=>{ game.state='racing'; hideOverlay(); }, 500);
+      SFX.go();
+      showOverlay(`<div class="countNum" style="color:#ffe46b">GO!</div>`, 'count');
+      setTimeout(()=>{ if(game.state==='countdown'){ game.state='racing'; hideOverlay(); } }, 500);
     }
   };
   tick();
 }
 function finishRace(){
   game.state='finished';
+  shake=8;
+  SFX.goal();
+  const wp=game.players[game.winner];
+  const laneY = game.winner===1 ? L.lane1Y : L.lane2Y;
+  // starburst at the finish flag
+  const col=cssv(wp.color);
+  for(let i=0;i<26;i++){
+    const a=Math.PI*2*i/26;
+    parts.push({type:'spark', x:L.finishX, y:laneY,
+      vx:Math.cos(a)*(120+Math.random()*160), vy:Math.sin(a)*(120+Math.random()*160)-60, g:200,
+      life:0.8, max:0.8, r:2.5+Math.random()*2.5, c:i%2?col:'#ffd166'});
+  }
   // confetti burst
   const cols=['#ff5a5a','#ffd166','#7cc93b','#4fb0e8','#ff8a3d','#c77dff'];
   for(let i=0;i<90;i++){
@@ -643,24 +973,36 @@ function finishRace(){
       r:Math.random()*Math.PI, vr:(Math.random()-0.5)*0.3,
       c:cols[i%cols.length]});
   }
-  setTimeout(()=>{ showOverlay(resultHTML()); }, 700);
+  const humanWon = game.mode==='2p' || game.winner===1;
+  setTimeout(()=>{ humanWon ? SFX.win() : SFX.lose(); }, 250);
+  setTimeout(()=>{ showOverlay(resultHTML()); }, 900);
 }
 
-/* ---------- settings controls ---------- */
-document.getElementById('modeSeg').addEventListener('click',e=>{
-  const b=e.target.closest('button'); if(!b) return;
-  document.querySelectorAll('#modeSeg button').forEach(x=>x.classList.remove('on'));
-  b.classList.add('on'); game.mode=b.dataset.mode;
-  document.getElementById('diffWrap').style.display = game.mode==='cpu'?'block':'none';
-  configurePlayers();
+/* ---------- stage buttons ---------- */
+const sndBtn=document.getElementById('sndBtn');
+function syncSndBtn(){ sndBtn.textContent = SFX.muted ? '🔇' : '🔊'; }
+syncSndBtn();
+sndBtn.addEventListener('click',()=>{ SFX.toggle(); syncSndBtn(); SFX.click(); });
+
+document.getElementById('setBtn').addEventListener('click',()=>{
+  SFX.click();
+  if(game.state==='racing' || game.state==='countdown'){
+    game.state = landmarker ? 'ready' : 'init';   // abort race back to menu
+  }
+  if(game.state==='finished'){ game.state='ready'; }
+  showOverlay(menuHTML());
 });
-document.getElementById('diffSeg').addEventListener('click',e=>{
-  const b=e.target.closest('button'); if(!b) return;
-  document.querySelectorAll('#diffSeg button').forEach(x=>x.classList.remove('on'));
-  b.classList.add('on'); game.difficulty=b.dataset.diff;
+
+document.getElementById('fsBtn').addEventListener('click',()=>{
+  SFX.click();
+  if(document.fullscreenElement){ document.exitFullscreen(); }
+  else if(stage.requestFullscreen){ stage.requestFullscreen(); }
 });
-const sens=document.getElementById('sens');
-sens.addEventListener('input',()=>{ game.sensitivity=+sens.value; document.getElementById('sensVal').textContent=sens.value; });
+
+pip.addEventListener('click',()=>{ SFX.click(); pip.classList.toggle('mini'); });
+
+/* debug hook: window.__shakutori.step(1) simulates one hop (no camera needed) */
+window.__shakutori = { game, step:(pid=1)=>{ if(game.state==='racing'){ game.players[pid].steps++; onStep(pid); } } };
 
 /* ---------- boot ---------- */
 configurePlayers();
