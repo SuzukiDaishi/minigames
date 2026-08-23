@@ -1,4 +1,5 @@
-const CACHE_NAME = 'minigames-v2';
+const CACHE_PREFIX = 'minigames-';
+const CACHE_NAME = `${CACHE_PREFIX}v3`;
 
 const PRECACHE = [
   './',
@@ -13,7 +14,22 @@ const PRECACHE = [
   './inchworm-race/icons/icon-192.png',
   './inchworm-race/icons/icon-512.png',
   './inchworm-race/icons/icon-maskable-512.png',
+  './kakipi-tamaire/',
+  './kakipi-tamaire/index.html',
+  './kakipi-tamaire/manifest.webmanifest',
+  './kakipi-tamaire/sw.js',
+  './kakipi-tamaire/icon-180.png',
+  './kakipi-tamaire/icon-192.png',
+  './kakipi-tamaire/icon-512.png',
+  './kakipi-tamaire/icon-maskable-512.png',
 ];
+
+const CACHEABLE_EXTERNAL_HOSTS = new Set([
+  'cdn.jsdelivr.net',
+  'storage.googleapis.com',
+  'fonts.googleapis.com',
+  'fonts.gstatic.com',
+]);
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -24,7 +40,11 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys()
-      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k))))
+      .then((keys) => Promise.all(
+        keys
+          .filter((key) => key.startsWith(CACHE_PREFIX) && key !== CACHE_NAME)
+          .map((key) => caches.delete(key))
+      ))
       .then(() => self.clients.claim())
   );
 });
@@ -40,11 +60,13 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(
       fetch(request)
         .then((res) => {
-          const copy = res.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+          if (res.ok) {
+            const copy = res.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+          }
           return res;
         })
-        .catch(() => caches.match(request))
+        .catch(() => caches.match(request).then((cached) => cached || caches.match('./index.html')))
     );
     return;
   }
@@ -65,6 +87,22 @@ self.addEventListener('fetch', (event) => {
         return cached || fetched;
       })
     );
+    return;
   }
-  // クロスオリジン（フォント・CDN等）はブラウザに任せる
+
+  // ゲームが利用するMediaPipe・モデル・Webフォントを初回取得後に再利用する。
+  if (CACHEABLE_EXTERNAL_HOSTS.has(url.hostname)) {
+    event.respondWith(
+      caches.match(request).then((cached) => {
+        if (cached) return cached;
+        return fetch(request).then((res) => {
+          if (res.ok || res.type === 'opaque') {
+            const copy = res.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+          }
+          return res;
+        });
+      })
+    );
+  }
 });
