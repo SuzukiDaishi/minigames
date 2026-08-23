@@ -1,0 +1,17 @@
+{
+  "name": "ケロジャンプ！ ～顔を縦に揺らして跳べ～",
+  "short_name": "ケロジャンプ",
+  "description": "顔トラッキングで操作する横スクロールアクション。顔を上下に動かしてケロちゃんをジャンプさせよう！",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#1a1030",
+  "theme_color": "#ff5fa2",
+  "lang": "ja",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
