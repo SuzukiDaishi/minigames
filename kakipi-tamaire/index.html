@@ -1,4 +1,1676 @@
-<!doctype html>
-<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>柿ピー玉入れ</title><style>html,body{margin:0;height:100%;background:#0b0620;color:#fff;font-family:system-ui,sans-serif;display:grid;place-items:center}p{opacity:.8}</style></head><body><p>柿ピー玉入れを読み込み中…</p><script>
-(async()=>{try{const names=['part-00.b64','part-01.b64','part-02.b64','part-03.b64','part-04.b64','part-05.b64'];const parts=await Promise.all(names.map(n=>fetch('./payload/'+n,{cache:'no-store'}).then(r=>{if(!r.ok)throw new Error(n+' '+r.status);return r.text()})));const b64=parts.join('').trim();const bin=atob(b64);const bytes=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)bytes[i]=bin.charCodeAt(i);const stream=new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));const html=await new Response(stream).text();document.open();document.write(html);document.close()}catch(e){document.body.innerHTML='<pre style="white-space:pre-wrap;padding:24px">読み込みに失敗しました\n'+String(e)+'</pre>'}})();
-</script></body></html>
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>ふたりで協力！柿ピー玉入れ</title>
+<!-- PWA -->
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0b0620">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="柿ピー玉入れ">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<!--
+  ============================================================
+  ふたりで協力！柿ピー玉入れ（顔＋頭上バー / PWA版 v7）
+  ============================================================
+  ・iPad 第9世代 / iPadOS 18 / Safari(またはブラウザラッパー) 向け
+  ・横向き・1〜2人プレイ・カメラ(前面)必須・HTTPS必須
+  ・検出：顔(BlazeFace short-range)のみ。各プレイヤーの頭上に傾く跳ね返しバー。
+    顔映像は端末内で切り抜いて描画するだけ。外部へは一切送信しない。
+  ・PWA構成（同じフォルダに置いてHTTPSで配信）:
+      kakipi-tamaire-v7.html / manifest.webmanifest / sw.js / icon-192.png / icon-512.png / icon-180.png
+    初回オンラインで一度読み込むと、Service Workerが下記CDN資産をキャッシュ→以降オフライン動作可。
+  ・外部通信（配布前チェック用リスト・初回のみ / 以降キャッシュ）:
+      1) cdn.jsdelivr.net        … MediaPipe Tasks Vision (JS + wasm)
+      2) storage.googleapis.com  … blaze_face_short_range.tflite モデル
+      3) fonts.googleapis.com / fonts.gstatic.com … Reggae One / M PLUS Rounded 1c
+    上記以外への送信ゼロ。カメラ映像・顔画像の保存/送信も一切なし。スコア記録もなし。
+  ・デバッグパネル: 画面左上すみを すばやく3回タップ
+  ============================================================
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Reggae+One&family=M+PLUS+Rounded+1c:wght@700;800&display=swap" rel="stylesheet">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-user-select:none; user-select:none; -webkit-touch-callout:none; }
+  html, body { width:100%; height:100%; overflow:hidden; background:#0b0620; touch-action:none; overscroll-behavior:none;
+    font-family:"M PLUS Rounded 1c", system-ui, sans-serif; }
+  #game { position:fixed; left:50%; top:50%; transform:translate(-50%,-50%); display:block; }
+  #cam { position:fixed; top:0; left:0; width:2px; height:2px; opacity:0.01; pointer-events:none; }
+
+  /* ---------- overlays ---------- */
+  .overlay { position:fixed; inset:0; overflow-y:auto; -webkit-overflow-scrolling:touch;
+    background:rgba(8,4,26,0.92); color:#fff; z-index:50; touch-action:pan-y; }
+  .overlay .inner { min-height:100%; display:flex; flex-direction:column; align-items:center;
+    justify-content:center; gap:16px; text-align:center; padding:20px 24px; }
+  .overlay.hidden { display:none; }
+  .ov-title { font-family:"Reggae One", sans-serif; font-size:clamp(26px, 5vw, 44px); color:#ffe63b;
+    text-shadow:0 0 12px rgba(255,180,0,.6), 3px 3px 0 #a41400; }
+  .ov-text { font-size:clamp(15px, 2.4vw, 20px); font-weight:700; line-height:1.8; color:#e8e2ff; }
+  .ov-sub { font-size:13px; color:#9a8fd0; line-height:1.7; }
+  .spinner { width:44px; height:44px; border-radius:50%; border:5px solid rgba(255,255,255,.15);
+    border-top-color:#57e8ff; animation:spin 0.9s linear infinite; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  .bigbtn { font-family:"Reggae One", sans-serif; font-size:clamp(20px,3.4vw,30px); color:#fff;
+    background:linear-gradient(180deg,#ff5a3c,#d31f0a); border:none; border-radius:60px; padding:16px 54px;
+    box-shadow:0 6px 0 #7c0f00, 0 0 26px rgba(255,90,60,.55); letter-spacing:.08em; }
+  .bigbtn:active { transform:translateY(4px); box-shadow:0 2px 0 #7c0f00; }
+
+  /* ---------- debug panel ---------- */
+  #debug { position:fixed; top:8px; right:8px; z-index:80; width:300px; max-height:92vh; overflow-y:auto;
+    background:rgba(10,8,30,.94); border:1px solid #4a3f8f; border-radius:12px; padding:12px 14px; color:#dcd6ff;
+    font-size:12px; display:none; -webkit-user-select:auto; touch-action:pan-y; }
+  #debug.show { display:block; }
+  #debug h3 { font-size:13px; color:#ffe63b; margin-bottom:8px; letter-spacing:.06em; }
+  #debug .row { margin-bottom:10px; }
+  #debug label { display:flex; justify-content:space-between; margin-bottom:2px; font-weight:700; }
+  #debug input[type=range] { width:100%; }
+  #debug .stat { font-family:monospace; color:#8ef2ff; margin-bottom:6px; }
+  #debug .dbtn { background:#2c2560; color:#fff; border:1px solid #5c50b0; border-radius:8px; padding:6px 10px;
+    font-size:12px; margin:2px 4px 2px 0; font-weight:700; }
+</style>
+</head>
+<body>
+<video id="cam" autoplay muted playsinline></video>
+<canvas id="game"></canvas>
+
+<!-- 起動オーバーレイ -->
+<div class="overlay" id="ovBoot">
+  <div class="inner">
+    <div class="ov-title" id="bootTitle">柿ピー玉入れ</div>
+    <div class="spinner" id="bootSpin"></div>
+    <div class="ov-text" id="bootMsg">じゅんびちゅう…</div>
+    <button class="bigbtn hidden" id="btnBoot" style="display:none">はじめる</button>
+    <button class="bigbtn" id="btnPreview" style="display:none; background:linear-gradient(180deg,#5a7cff,#2a3fd3); box-shadow:0 6px 0 #101a7c, 0 0 26px rgba(90,124,255,.55); font-size:clamp(16px,2.6vw,24px);">カメラなしで タッチ体験</button>
+    <div class="ov-sub" id="bootSub">はじめてのときは「カメラを許可」を おしてね</div>
+  </div>
+</div>
+
+<!-- プレビューモード用 表示サイズ切替 -->
+<button id="scaleBtn" style="display:none; position:fixed; top:10px; right:10px; z-index:45;
+  font-family:'M PLUS Rounded 1c',sans-serif; font-weight:800; font-size:13px; color:#dcd6ff;
+  background:rgba(10,8,30,.85); border:1px solid #4a3f8f; border-radius:20px; padding:8px 14px;
+  touch-action:none;">表示 100%</button>
+
+<!-- 縦向き警告 -->
+<div class="overlay hidden" id="ovRotate" style="z-index:60">
+  <div class="inner">
+    <div class="ov-title">iPadを よこむきに してね！</div>
+    <div class="ov-text">🔄</div>
+  </div>
+</div>
+
+<!-- デバッグパネル -->
+<div id="debug">
+  <h3>⚙ デバッグパネル</h3>
+  <div class="stat" id="dbgStat">fps: -- / infer: --ms</div>
+  <div class="row"><label>目標個数 <span id="v_target"></span></label><input type="range" id="s_target" min="3" max="25" step="1"></div>
+  <div class="row"><label>制限時間(秒) <span id="v_time"></span></label><input type="range" id="s_time" min="15" max="60" step="5"></div>
+  <div class="row"><label>落下間隔(ms) <span id="v_spawn"></span></label><input type="range" id="s_spawn" min="200" max="2000" step="50"></div>
+  <div class="row"><label>同時上限 <span id="v_max"></span></label><input type="range" id="s_max" min="5" max="30" step="1"></div>
+  <div class="row"><label>ビーム反発 <span id="v_power"></span></label><input type="range" id="s_power" min="0.5" max="2.5" step="0.05"></div>
+  <div class="row"><label>パー判定しきい値 <span id="v_open"></span></label><input type="range" id="s_open" min="1.0" max="1.6" step="0.02"></div>
+  <div class="row"><label>重力 <span id="v_grav"></span></label><input type="range" id="s_grav" min="600" max="2200" step="50"></div>
+  <div class="row"><label>カゴの広さ <span id="v_rim"></span></label><input type="range" id="s_rim" min="0.07" max="0.16" step="0.005"></div>
+  <div class="row"><label>発射スピード(B) <span id="v_launch"></span></label><input type="range" id="s_launch" min="600" max="1600" step="25"></div>
+  <div class="row"><label>ふち吸い込み <span id="v_magnet"></span></label><input type="range" id="s_magnet" min="0" max="6" step="0.2"></div>
+  <div class="row">
+    <button class="dbtn" id="dbgMode">反射: B トランポリン</button>
+    <button class="dbtn" id="dbgMove">カゴ移動: オフ</button>
+  </div>
+  <div class="row">
+    <button class="dbtn" id="dbgLm">ランドマーク表示</button>
+    <button class="dbtn" id="dbgWin">勝ちリザルト</button>
+    <button class="dbtn" id="dbgLose">負けリザルト</button>
+    <button class="dbtn" id="dbgReset">タイトルへ</button>
+    <button class="dbtn" id="dbgClose">とじる</button>
+  </div>
+</div>
+
+<script type="module">
+/* ============================================================
+   0. 設定・状態
+============================================================ */
+const CFG = {   // ★2026-07 実機調整値をデフォルト化
+  target: 10,          // 目標個数
+  playTime: 50,        // 制限時間
+  spawnInterval: 400,  // 落下間隔ms
+  maxPieces: 25,       // 同時上限
+  beamPower: 1.5,      // ビーム反発
+  openThresh: 1.22,    // パー判定（指先/手サイズ比）
+  closeThresh: 0.92,   // グー判定
+  gravity: 1350,
+  rimHalf: 0.130,      // カゴ開口半径（画面幅比）
+  chargeTime: 1.35,    // 最大チャージ秒
+  showLandmarks: false,
+  bpm: 122,
+  mode: 'B',           // 反射モード B=トランポリン / A=ミラー反射
+  launchSpeed: 1275,   // モードBの発射スピード
+  magnet: 6.0,         // カゴふち吸い込み（0でオフ）
+  movingBasket: true,  // カゴが左右に動く
+};
+
+const STATE = { BOOT:0, TITLE:1, COUNTDOWN:2, PLAY:3, RESULT:4 };
+let state = STATE.BOOT;
+let stateT = 0;              // 現ステートの経過秒
+let score = 0;
+let timeLeft = CFG.playTime;
+let won = false;
+
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+let W = 0, H = 0, DPR = 1;
+let handLayer = null, handCtx = null;   // 手のシルエット合成用（不透明で描いて半透明で乗せる）
+
+let viewScale = 1;                       // プレビュー用の表示縮小率
+function resize() {
+  DPR = Math.min(window.devicePixelRatio || 1, 1.5);
+  const vv = window.visualViewport;      // 実際に見えている領域を基準にする
+  const vw = vv ? vv.width : window.innerWidth;
+  const vh = vv ? vv.height : window.innerHeight;
+  W = Math.round(vw * viewScale); H = Math.round(vh * viewScale);
+  canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+  canvas.width = Math.round(W * DPR); canvas.height = Math.round(H * DPR);
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  if (!basketX || state !== STATE.PLAY) { basketX = W/2; basketTargetX = W/2; }
+  handLayer = document.createElement('canvas');
+  handLayer.width = Math.max(1, W); handLayer.height = Math.max(1, H);
+  handCtx = handLayer.getContext('2d');
+  buildBackground();
+  document.getElementById('ovRotate').classList.toggle('hidden', W >= H || previewMode);
+}
+window.addEventListener('resize', () => setTimeout(resize, 60));
+window.addEventListener('orientationchange', () => setTimeout(resize, 250));
+if (window.visualViewport)
+  window.visualViewport.addEventListener('resize', () => setTimeout(resize, 60));
+
+/* ============================================================
+   1. ユーティリティ
+============================================================ */
+const rnd  = (a, b) => a + Math.random() * (b - a);
+const clamp = (v, a, b) => v < a ? a : (v > b ? b : v);
+const lerp = (a, b, t) => a + (b - a) * t;
+const dist = (x1,y1,x2,y2) => Math.hypot(x2-x1, y2-y1);
+const TAU = Math.PI * 2;
+
+function makeSprite(size, draw) {
+  const c = document.createElement('canvas');
+  c.width = c.height = size;
+  const g = c.getContext('2d');
+  g.translate(size/2, size/2);
+  draw(g, size);
+  return c;
+}
+
+/* ============================================================
+   2. スプライト事前レンダリング（実行中は描き直さない）
+============================================================ */
+let SPR = {};
+function buildSprites() {
+  // 柿の種（オレンジの三日月）
+  SPR.kaki = makeSprite(96, (g,s) => {
+    g.rotate(-0.5);
+    g.shadowColor = 'rgba(255,120,20,.85)'; g.shadowBlur = 12;
+    g.fillStyle = '#ff7a1a';
+    g.beginPath();
+    g.arc(0, 6, 26, Math.PI*1.05, Math.PI*1.95);
+    g.arc(0, -12, 30, Math.PI*0.05, Math.PI*0.92, true);
+    g.closePath(); g.fill();
+    g.shadowBlur = 0;
+    g.strokeStyle = '#a83c00'; g.lineWidth = 3.5; g.stroke();
+    // てり
+    g.fillStyle = 'rgba(255,220,160,.75)';
+    g.beginPath(); g.ellipse(-9, -14, 8, 4, -0.6, 0, TAU); g.fill();
+    // つぶつぶ
+    g.fillStyle = 'rgba(140,50,0,.55)';
+    for (const [px,py] of [[-14,2],[0,7],[12,-2],[-4,-6],[9,10]]) {
+      g.beginPath(); g.arc(px, py, 1.7, 0, TAU); g.fill();
+    }
+  });
+  // ピーナッツ（ベージュのひょうたん型）
+  SPR.peanut = makeSprite(96, (g,s) => {
+    g.rotate(0.35);
+    g.shadowColor = 'rgba(240,200,120,.8)'; g.shadowBlur = 10;
+    g.fillStyle = '#f2d9a0';
+    g.beginPath();
+    g.ellipse(0, -12, 15, 17, 0, 0, TAU); g.fill();
+    g.beginPath();
+    g.ellipse(0, 11, 17, 18, 0, 0, TAU); g.fill();
+    g.shadowBlur = 0;
+    g.strokeStyle = '#b98d3c'; g.lineWidth = 3;
+    g.beginPath(); g.ellipse(0, -12, 15, 17, 0, Math.PI*1.15, Math.PI*1.85); g.stroke();
+    g.beginPath(); g.ellipse(0, 11, 17, 18, 0, Math.PI*0.15, Math.PI*0.85); g.stroke();
+    g.beginPath(); g.moveTo(-14.5,-6); g.bezierCurveTo(-17,2,-17,2,-16.5,6); g.stroke();
+    g.beginPath(); g.moveTo(14.5,-6); g.bezierCurveTo(17,2,17,2,16.5,6); g.stroke();
+    // あみめ模様
+    g.strokeStyle = 'rgba(185,141,60,.5)'; g.lineWidth = 1.5;
+    for (let i=-2;i<=2;i++){ g.beginPath(); g.moveTo(i*6,-26); g.lineTo(i*5,27); g.stroke(); }
+    g.fillStyle = 'rgba(255,245,215,.8)';
+    g.beginPath(); g.ellipse(-6,-16,5,3,-0.5,0,TAU); g.fill();
+  });
+  // やわらかい光の粒
+  SPR.glow = makeSprite(64, (g,s) => {
+    const gr = g.createRadialGradient(0,0,0, 0,0,30);
+    gr.addColorStop(0,'rgba(255,255,255,1)');
+    gr.addColorStop(0.35,'rgba(180,240,255,.55)');
+    gr.addColorStop(1,'rgba(120,180,255,0)');
+    g.fillStyle = gr; g.fillRect(-32,-32,64,64);
+  });
+  // 電飾のぼんぼり
+  SPR.bokeh = makeSprite(48, (g,s) => {
+    const gr = g.createRadialGradient(0,0,0, 0,0,22);
+    gr.addColorStop(0,'rgba(255,240,180,1)');
+    gr.addColorStop(0.4,'rgba(255,200,90,.7)');
+    gr.addColorStop(1,'rgba(255,160,40,0)');
+    g.fillStyle = gr; g.fillRect(-24,-24,48,48);
+  });
+  // 紙吹雪（色は描画時にtint…ではなく複数色分作る）
+  SPR.confetti = ['#ff5a3c','#ffe63b','#57e8ff','#ff7ad9','#8dff6b'].map(col =>
+    makeSprite(24, (g,s) => { g.fillStyle = col; g.fillRect(-8,-5,16,10); }));
+}
+
+/* ============================================================
+   3. 背景（ビアガーデンの夜）— リサイズ時のみ再構築
+============================================================ */
+let bgCanvas = null;
+let lights = [];   // 電飾（動的にきらめく）
+function buildBackground() {
+  if (!W || !H) return;
+  bgCanvas = document.createElement('canvas');
+  bgCanvas.width = W; bgCanvas.height = H;
+  const g = bgCanvas.getContext('2d');
+  // 夜空グラデ
+  const sky = g.createLinearGradient(0, 0, 0, H);
+  sky.addColorStop(0, '#150a3a');
+  sky.addColorStop(0.55, '#2a1060');
+  sky.addColorStop(1, '#471454');
+  g.fillStyle = sky; g.fillRect(0, 0, W, H);
+  // 星
+  for (let i = 0; i < 70; i++) {
+    g.fillStyle = `rgba(255,255,255,${rnd(0.15,0.6)})`;
+    g.beginPath(); g.arc(rnd(0,W), rnd(0,H*0.5), rnd(0.6,1.6), 0, TAU); g.fill();
+  }
+  // ビルのシルエット
+  g.fillStyle = '#0d0626';
+  let x = 0;
+  while (x < W) {
+    const bw = rnd(40, 110), bh = rnd(H*0.1, H*0.24);
+    g.fillRect(x, H - bh - H*0.1, bw, bh);
+    // 窓あかり
+    g.fillStyle = 'rgba(255,220,130,.35)';
+    for (let wy = H-bh-H*0.1+8; wy < H-H*0.12; wy += 16)
+      for (let wx = x+6; wx < x+bw-8; wx += 14)
+        if (Math.random() < 0.3) g.fillRect(wx, wy, 5, 7);
+    g.fillStyle = '#0d0626';
+    x += bw + rnd(4, 20);
+  }
+  // 手前：ビアガーデンのテーブルとジョッキのシルエット
+  g.fillStyle = '#08041a';
+  g.fillRect(0, H*0.9, W, H*0.1);
+  const mug = (mx, scale) => {
+    g.save(); g.translate(mx, H*0.9); g.scale(scale, scale);
+    g.fillStyle = '#08041a';
+    g.fillRect(-16, -34, 32, 34);
+    g.strokeStyle = '#08041a'; g.lineWidth = 7;
+    g.beginPath(); g.arc(22, -18, 9, -Math.PI/2, Math.PI/2); g.stroke();
+    g.fillStyle = 'rgba(255,214,90,.28)';
+    g.fillRect(-13, -30, 26, 26);
+    g.fillStyle = 'rgba(255,255,255,.30)';
+    g.beginPath(); g.ellipse(0, -33, 15, 6, 0, 0, TAU); g.fill();
+    g.restore();
+  };
+  for (let i = 0; i < 7; i++) mug(rnd(W*0.05, W*0.95), rnd(0.7, 1.15));
+  // 電飾ワイヤー（2本のたるみ曲線）+ 電球位置を記録
+  lights = [];
+  const wire = (y0, sag, n) => {
+    g.strokeStyle = 'rgba(0,0,0,.5)'; g.lineWidth = 2;
+    g.beginPath(); g.moveTo(-10, y0);
+    g.quadraticCurveTo(W/2, y0 + sag, W+10, y0); g.stroke();
+    for (let i = 0; i <= n; i++) {
+      const t = i / n;
+      const lx = lerp(-10, W+10, t);
+      const ly = (1-t)*(1-t)*y0 + 2*(1-t)*t*(y0+sag) + t*t*y0 + 6;
+      lights.push({ x:lx, y:ly, ph: rnd(0, TAU), s: rnd(0.6, 1.1) });
+    }
+  };
+  wire(H*0.07, H*0.09, 11);
+  wire(H*0.16, H*0.07, 9);
+}
+
+/* ============================================================
+   4. パーティクル（全体プール制・上限固定）
+============================================================ */
+const P_MAX = 200;
+const particles = [];
+function spawnParticle(o) {
+  if (particles.length >= P_MAX) particles.shift();
+  particles.push(Object.assign({ x:0,y:0,vx:0,vy:0,life:0.5,age:0,size:14,spr:SPR.glow,grav:0,rot:0,vrot:0,mode:'n' }, o));
+}
+function burst(x, y, n, speed, opts={}) {
+  for (let i = 0; i < n; i++) {
+    const a = rnd(0, TAU), sp = rnd(speed*0.3, speed);
+    spawnParticle(Object.assign({ x, y, vx:Math.cos(a)*sp, vy:Math.sin(a)*sp,
+      life:rnd(0.25,0.6), size:rnd(8,20) }, opts));
+  }
+}
+function updateParticles(dt) {
+  for (let i = particles.length-1; i >= 0; i--) {
+    const p = particles[i];
+    p.age += dt;
+    if (p.age >= p.life) { particles.splice(i,1); continue; }
+    if (p.mode === 'seek') {  // チャージ吸い込み：目標へ収束
+      p.x = lerp(p.x, p.tx, dt*6); p.y = lerp(p.y, p.ty, dt*6);
+    } else {
+      p.vy += p.grav * dt;
+      p.x += p.vx * dt; p.y += p.vy * dt;
+    }
+    p.rot += p.vrot * dt;
+  }
+}
+function drawParticles() {
+  ctx.globalCompositeOperation = 'lighter';
+  for (const p of particles) {
+    const t = 1 - p.age / p.life;
+    ctx.globalAlpha = t;
+    const s = p.size * (p.mode==='seek' ? t : (0.5 + t*0.7));
+    if (p.rot) {
+      ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.rot);
+      ctx.drawImage(p.spr, -s/2, -s/2, s, s); ctx.restore();
+    } else {
+      ctx.drawImage(p.spr, p.x - s/2, p.y - s/2, s, s);
+    }
+  }
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = 'source-over';
+}
+
+/* ============================================================
+   5. サウンドエンジン（Web Audio 全合成 / ビートシンク）
+============================================================ */
+const SND = {
+  ac: null, master: null, comp: null, noiseBuf: null,
+  playing: false, nextBeatT: 0, beat16: 0, bpm: CFG.bpm,
+  combo: 0, comboT: 0,
+  charge: null,
+};
+const PENTA = [220, 261.63, 293.66, 329.63, 392, 440, 523.25, 587.33, 659.25, 783.99, 880];
+
+function initAudio() {
+  if (SND.ac) { if (SND.ac.state === 'suspended') SND.ac.resume(); return; }
+  const ac = new (window.AudioContext || window.webkitAudioContext)();
+  SND.ac = ac;
+  SND.comp = ac.createDynamicsCompressor();
+  SND.comp.threshold.value = -14; SND.comp.ratio.value = 6;
+  SND.master = ac.createGain(); SND.master.gain.value = 0.85;
+  SND.master.connect(SND.comp); SND.comp.connect(ac.destination);
+  // ノイズバッファ（共用）
+  const len = ac.sampleRate * 1.2;
+  SND.noiseBuf = ac.createBuffer(1, len, ac.sampleRate);
+  const d = SND.noiseBuf.getChannelData(0);
+  for (let i = 0; i < len; i++) d[i] = Math.random()*2 - 1;
+}
+function env(g, t, a, peak, dec, sus=0.0001) {
+  g.gain.cancelScheduledValues(t);
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.linearRampToValueAtTime(peak, t + a);
+  g.gain.exponentialRampToValueAtTime(sus, t + a + dec);
+}
+function osc(type, f0, t, dur, peak, dec, f1=null, dest=null) {
+  const ac = SND.ac; if (!ac) return;
+  const o = ac.createOscillator(), g = ac.createGain();
+  o.type = type; o.frequency.setValueAtTime(f0, t);
+  if (f1 !== null) o.frequency.exponentialRampToValueAtTime(Math.max(f1,1), t + dur);
+  env(g, t, 0.004, peak, dec);
+  o.connect(g); g.connect(dest || SND.master);
+  o.start(t); o.stop(t + dur + 0.1);
+}
+function noiseHit(t, dur, peak, filtType, freq, q=1) {
+  const ac = SND.ac; if (!ac) return;
+  const src = ac.createBufferSource(); src.buffer = SND.noiseBuf;
+  const f = ac.createBiquadFilter(); f.type = filtType; f.frequency.value = freq; f.Q.value = q;
+  const g = ac.createGain();
+  env(g, t, 0.002, peak, dur);
+  src.connect(f); f.connect(g); g.connect(SND.master);
+  src.start(t, rnd(0, 0.5)); src.stop(t + dur + 0.1);
+}
+// --- ワンショット ---
+const sKick = t => { osc('sine', 150, t, 0.16, 0.9, 0.15, 48); noiseHit(t, 0.03, 0.25, 'highpass', 3000); };
+const sBassN = (t, f) => {
+  const ac = SND.ac;
+  const o = ac.createOscillator(); o.type = 'sawtooth'; o.frequency.value = f;
+  const flt = ac.createBiquadFilter(); flt.type = 'lowpass'; flt.Q.value = 6;
+  flt.frequency.value = 220 + gameProgress() * 900;
+  const g = ac.createGain(); env(g, t, 0.006, 0.34, 0.17);
+  o.connect(flt); flt.connect(g); g.connect(SND.master);
+  o.start(t); o.stop(t + 0.3);
+};
+const sHat = (t, open) => noiseHit(t, open ? 0.14 : 0.045, 0.16, 'highpass', 7500);
+const sClap = t => { for (let i=0;i<3;i++) noiseHit(t + i*0.011, 0.09, 0.2, 'bandpass', 1600, 1.5); };
+const sLeadN = (t, f) => {
+  const ac = SND.ac;
+  const o = ac.createOscillator(); o.type = 'square'; o.frequency.value = f;
+  const flt = ac.createBiquadFilter(); flt.type = 'lowpass'; flt.Q.value = 3;
+  flt.frequency.value = 700 + gameProgress() * 4200;
+  const g = ac.createGain(); env(g, t, 0.005, 0.13, 0.13);
+  o.connect(flt); flt.connect(g); g.connect(SND.master);
+  o.start(t); o.stop(t + 0.2);
+};
+function sHitCombo() {   // ビーム反射音：ペンタで上昇
+  if (!SND.ac) return;
+  const t = SND.ac.currentTime;
+  const f = PENTA[Math.min(SND.combo, PENTA.length-1)];
+  osc('triangle', f, t, 0.22, 0.32, 0.2);
+  osc('triangle', f*2, t, 0.12, 0.1, 0.1);
+  SND.combo++; SND.comboT = 1.8;
+}
+function sGoal() {       // しゅぽっ！ + ミニごほうび
+  if (!SND.ac) return;
+  const ac = SND.ac, t = ac.currentTime;
+  // 「しゅ」…短いノイズの吸い込み（バンドパスを上へスイープ）
+  const src = ac.createBufferSource(); src.buffer = SND.noiseBuf;
+  const f = ac.createBiquadFilter(); f.type = 'bandpass'; f.Q.value = 3;
+  f.frequency.setValueAtTime(500, t);
+  f.frequency.exponentialRampToValueAtTime(3400, t + 0.07);
+  const g = ac.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.linearRampToValueAtTime(0.3, t + 0.02);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.09);
+  src.connect(f); f.connect(g); g.connect(SND.master);
+  src.start(t, rnd(0, 0.5)); src.stop(t + 0.12);
+  // 「ぽっ！」…ピッチが急上昇するポップ（コルクが抜ける音）
+  osc('sine', 320, t + 0.055, 0.11, 0.65, 0.09, 1250);
+  // 高いところで小さくキラッ
+  osc('triangle', 1568, t + 0.12, 0.07, 0.14, 0.06);
+  // ちいさなごほうびアルペジオ（ひかえめ）
+  osc('triangle', 659.25, t + 0.17, 0.11, 0.14, 0.1);
+  osc('triangle', 880,    t + 0.25, 0.15, 0.16, 0.14);
+}
+function sCount(final) {
+  if (!SND.ac) return;
+  const t = SND.ac.currentTime;
+  if (final) { osc('square', 880, t, 0.4, 0.35, 0.38); osc('square', 440, t, 0.4, 0.3, 0.38);
+    noiseHit(t, 0.35, 0.3, 'highpass', 5000); }
+  else osc('square', 660, t, 0.12, 0.3, 0.1);
+}
+function sChargeStart() {
+  if (!SND.ac || SND.charge) return;
+  const ac = SND.ac, t = ac.currentTime;
+  const src = ac.createBufferSource(); src.buffer = SND.noiseBuf; src.loop = true;
+  const f = ac.createBiquadFilter(); f.type = 'bandpass'; f.Q.value = 2; f.frequency.value = 240;
+  const g = ac.createGain(); g.gain.value = 0;
+  g.gain.linearRampToValueAtTime(0.16, t + 0.15);
+  const o = ac.createOscillator(); o.type = 'sawtooth'; o.frequency.value = 70;
+  const og = ac.createGain(); og.gain.value = 0;
+  og.gain.linearRampToValueAtTime(0.06, t + 0.2);
+  src.connect(f); f.connect(g); g.connect(SND.master);
+  o.connect(og); og.connect(SND.master);
+  src.start(t); o.start(t);
+  SND.charge = { src, f, g, o, og };
+}
+function sChargeUpdate(c) {
+  if (!SND.charge) return;
+  SND.charge.f.frequency.value = 240 + c * 3200;
+  SND.charge.o.frequency.value = 70 + c * 240;
+}
+function sChargeEnd(release, c) {
+  const ch = SND.charge; if (!ch) return;
+  SND.charge = null;
+  const ac = SND.ac, t = ac.currentTime;
+  ch.g.gain.linearRampToValueAtTime(0, t + 0.05);
+  ch.og.gain.linearRampToValueAtTime(0, t + 0.05);
+  ch.src.stop(t + 0.1); ch.o.stop(t + 0.1);
+  if (release) {  // ドゥーン
+    osc('sine', 160, t, 0.6, 0.85, 0.55, 38);
+    const o = ac.createOscillator(); o.type = 'sawtooth'; o.frequency.setValueAtTime(110, t);
+    o.frequency.exponentialRampToValueAtTime(45, t + 0.4);
+    const ws = ac.createWaveShaper();
+    const curve = new Float32Array(256);
+    for (let i=0;i<256;i++){ const x=i/128-1; curve[i]=Math.tanh(x*3); }
+    ws.curve = curve;
+    const g = ac.createGain(); env(g, t, 0.004, 0.28 + c*0.2, 0.45);
+    o.connect(ws); ws.connect(g); g.connect(SND.master);
+    o.start(t); o.stop(t + 0.6);
+    noiseHit(t, 0.3, 0.3, 'lowpass', 900);
+  }
+}
+function sWin() {
+  if (!SND.ac) return;
+  const t = SND.ac.currentTime;
+  const seq = [[440,0],[554.37,0.14],[659.25,0.28],[880,0.42],[880,0.72],[1108.7,0.86],[1318.5,1.0]];
+  for (const [f, dt] of seq) { osc('triangle', f, t+dt, 0.3, 0.3, 0.28); osc('square', f/2, t+dt, 0.3, 0.1, 0.28); }
+  noiseHit(t+1.0, 0.9, 0.2, 'highpass', 6000);
+}
+function sLose() {
+  if (!SND.ac) return;
+  const t = SND.ac.currentTime;
+  const seq = [[329.63,0],[311.13,0.35],[293.66,0.7],[220,1.1]];
+  for (const [f, dt] of seq) osc('triangle', f, t+dt, dt>1?0.8:0.3, 0.3, dt>1?0.75:0.28);
+}
+// --- BGMスケジューラ ---
+function startBGM() {
+  if (!SND.ac) return;
+  SND.playing = true;
+  SND.beat16 = 0;
+  SND.nextBeatT = SND.ac.currentTime + 0.06;
+}
+function stopBGM() { SND.playing = false; }
+const BASS_PAT = [55,0,55,55, 65.41,0,55,49, 55,0,55,55, 82.41,0,65.41,49];  // 8分×16(2小節)
+const LEAD_PAT = [440,0,523.25,0, 659.25,440,0,523.25, 0,587.33,440,0, 783.99,0,659.25,880,
+                  440,0,523.25,0, 659.25,440,0,392,   0,587.33,440,0, 329.63,0,392,0];
+function gameProgress() { return state === STATE.PLAY ? clamp(score / CFG.target, 0, 1) : 0.3; }
+function schedulerTick() {
+  if (!SND.ac || !SND.playing) return;
+  const ac = SND.ac;
+  const spb16 = 60 / SND.bpm / 4;   // 16分音符の長さ
+  while (SND.nextBeatT < ac.currentTime + 0.12) {
+    const t = SND.nextBeatT, i = SND.beat16;
+    const prog = gameProgress();
+    const rush = state === STATE.PLAY && timeLeft <= 10;
+    if (i % 4 === 0) sKick(t);                                     // 4つ打ち
+    if (prog >= 0.22 && i % 2 === 0) {                             // ベース(8分)
+      const f = BASS_PAT[(i/2) % 16]; if (f) sBassN(t, f);
+    }
+    if (prog >= 0.48 || rush) {                                    // ハット
+      if (rush) sHat(t, false);                                    // 16分刻み
+      else if (i % 4 === 2) sHat(t, i % 16 === 14);
+      if (i % 8 === 4) sClap(t);
+    }
+    if (prog >= 0.72) {                                            // リード
+      const f = LEAD_PAT[i % 32]; if (f) sLeadN(t, f);
+    }
+    SND.nextBeatT += spb16;
+    SND.beat16++;
+  }
+}
+setInterval(schedulerTick, 25);
+
+/* ============================================================
+   6. 顔検出（MediaPipe Tasks Vision / BlazeFace short-range）
+   ※importは動的に行う：CDNがブロックされる環境（プレビュー等）でも
+     スクリプト全体が止まらず、タッチ体験モードに逃げられるようにする
+============================================================ */
+const MEDIAPIPE_URL = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14';
+const FACE_MODEL_URL = 'https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite';
+const FACE_CROP = 1.35;  // boundingBoxを縦横このぶん拡張して切り抜く（顎・口が切れるのを防ぐ）
+const FACE_VIEW = 0.7;   // 画面上の顔カーソルの表示スケール（0.7=約70%に縮小）
+const BAR_LEN   = 1.9;   // 頭上バーの半長（顔半径比）
+const BAR_GAP   = 1.25;  // バーを顔中心からどれだけ上に置くか（顔半径比）
+const BAR_TILT  = 0.8;   // 首の傾き→バー傾きの最大角(rad, 約46°)
+
+const video = document.getElementById('cam');
+let faceDet = null;                                // 顔検出器（遅延ロード）
+let visionMod = null, visionFileset = null;        // MediaPipe wasm/JS は一度だけ読む
+let inferBusy = false, frameFlip = false, lastInferMs = 0;
+const detCanvas = document.createElement('canvas');
+detCanvas.width = 320; detCanvas.height = 240;
+const detCtx = detCanvas.getContext('2d', { willReadFrequently: false });
+
+// プレイヤーの手（P1=左/シアン、P2=右/ピンク）
+function newHand(id) {
+  return { id, present: false, lastSeen: -9, open: false, openness: 0,
+    palm: {x:0,y:0}, palmS: {x:0,y:0},         // 生値 / スムージング値（=カーソル位置。顔でも流用）
+    size: 60, pts: [], curl: 0,                // curl: プレビュー手の握り具合 0=パー 1=グー
+    faceSrc: null, faceR: 60,                  // 顔モード：切り抜き元(video px) と 画面上の半径
+    faceRS: 60,                                // 半径のスムージング値（ちらつき防止）
+    roll: 0, rollS: 0,                         // 首の傾き（生/スムージング）→頭上バーの傾き
+    bar: { active:false, ax:0, ay:0, bx:0, by:0, power:1 },  // 頭上の跳ね返しバー
+    color: id === 0 ? '#57e8ff' : '#ff7ad9',
+    colorDim: id === 0 ? 'rgba(87,232,255,' : 'rgba(255,122,217,',
+    fillCol: id === 0 ? '#7cb8f2' : '#f293d8',
+    edgeCol: id === 0 ? '#dff4ff' : '#ffe3f7' };
+}
+const hands = [newHand(0), newHand(1)];
+
+async function setupCamera() {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia)
+    throw new Error('この環境ではカメラAPIがつかえません');
+  const stream = await navigator.mediaDevices.getUserMedia({
+    video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
+    audio: false
+  });
+  video.srcObject = stream;
+  await new Promise(res => { video.onloadedmetadata = res; });
+  await video.play();
+}
+async function loadVision() {
+  if (!visionMod) visionMod = await import(MEDIAPIPE_URL);
+  if (!visionFileset) visionFileset = await visionMod.FilesetResolver.forVisionTasks(MEDIAPIPE_URL + '/wasm');
+  return visionMod;
+}
+async function setupFaceDet() {
+  if (faceDet) return;
+  const mod = await loadVision();
+  const make = del => mod.FaceDetector.createFromOptions(visionFileset, {
+    baseOptions: { modelAssetPath: FACE_MODEL_URL, delegate: del },
+    runningMode: 'VIDEO',
+    // 顔＝距離で通行人をはじきやすい。少し甘めから。
+    minDetectionConfidence: 0.3, minSuppressionThreshold: 0.3
+  });
+  try { faceDet = await make('GPU'); }
+  catch (e) { faceDet = await make('CPU'); }
+}
+
+// 正規化座標→画面座標（左右ミラー・カバーフィット）
+function mapPoint(lm) {
+  const va = (video.videoWidth || 4) / (video.videoHeight || 3);
+  const ca = W / H;
+  let sx = 1, sy = 1, ox = 0, oy = 0;
+  if (va > ca) { sx = va / ca; ox = (1 - sx) / 2; }       // 動画が横長→横をトリミング
+  else         { sy = ca / va; oy = (1 - sy) / 2; }
+  return { x: ((1 - lm.x) * sx + ox) * W, y: (lm.y * sy + oy) * H };
+}
+
+// 推論ディスパッチャ（モード共通のフレーム間引き・多重防止だけ担当）
+function runInference(now) {
+  if (!faceDet || inferBusy || video.readyState < 2) return;
+  frameFlip = !frameFlip;
+  if (frameFlip) return;                       // 1フレームおきに推論（描画60fps/推論30fps）
+  inferBusy = true;
+  try { runFaceInference(now); } catch (e) {}
+  inferBusy = false;
+}
+
+// --- 顔：FaceDetector → boundingBox中心をカーソルに。切り抜き元(video px)＋首の傾きも持たせる ---
+function runFaceInference(now) {
+  const t0 = performance.now();
+  detCtx.drawImage(video, 0, 0, 320, 240);
+  let result = null;
+  try { result = faceDet.detectForVideo(detCanvas, now); } catch (e) {}
+  lastInferMs = performance.now() - t0;
+  if (!result) return;
+  const vw = video.videoWidth || 640, vh = video.videoHeight || 480;
+  // boundingBox は detCanvas(320x240)ピクセル。keypoints は正規化[0,1]。
+  const raw = [];
+  for (const det of (result.detections || [])) {
+    const bb = det.boundingBox; if (!bb) continue;
+    const nw = bb.width / 320, nh = bb.height / 240;
+    const cxn = (bb.originX + bb.width / 2) / 320;
+    const cyn = (bb.originY + bb.height / 2) / 240;
+    raw.push({ cxn, cyn, nw, nh, area: nw * nh, kp: det.keypoints || null });
+  }
+  // 大きい顔＝近い人を優先し、上位2つだけ採用（通行人・遠くの人を弾く）
+  raw.sort((a, b) => b.area - a.area);
+  const dets = [];
+  for (const f of raw.slice(0, 2)) {
+    const center = mapPoint({ x: f.cxn, y: f.cyn });
+    const lft = mapPoint({ x: f.cxn - f.nw / 2, y: f.cyn });
+    const rgt = mapPoint({ x: f.cxn + f.nw / 2, y: f.cyn });
+    const top = mapPoint({ x: f.cxn, y: f.cyn - f.nh / 2 });
+    const bot = mapPoint({ x: f.cxn, y: f.cyn + f.nh / 2 });
+    const wScr = dist(lft.x, lft.y, rgt.x, rgt.y);
+    const hScr = dist(top.x, top.y, bot.x, bot.y);
+    // 表示半径（FACE_VIEWで縮小）。切り抜きの余白はFACE_CROPで確保。
+    const R = clamp(Math.max(wScr, hScr) * FACE_CROP * FACE_VIEW * 0.5, 30, H * 0.30);
+    // 切り抜きは video px の正方形（円クリップに歪みなく収める）
+    const sidePx = Math.max(f.nw * vw, f.nh * vh) * FACE_CROP;
+    const src = { sx: f.cxn * vw - sidePx / 2, sy: f.cyn * vh - sidePx / 2, side: sidePx };
+    // 首の傾き：両目キーポイント(0,1)の角度。ミラー空間で計算＝見た目の顔と一致。
+    let roll = 0;
+    if (f.kp && f.kp.length >= 2) {
+      const e0 = mapPoint(f.kp[0]), e1 = mapPoint(f.kp[1]);
+      let ang = Math.atan2(e1.y - e0.y, e1.x - e0.x);
+      if (ang >  Math.PI / 2) ang -= Math.PI;   // 目の左右順に依らず[-90,90]へ畳む
+      if (ang < -Math.PI / 2) ang += Math.PI;
+      roll = clamp(ang, -BAR_TILT, BAR_TILT);
+    }
+    dets.push({ palm: center, size: R, isFace: true, faceR: R, faceSrc: src, roll });
+  }
+  assignDets(dets, performance.now() / 1000);
+}
+
+// 割り当て：左右(x昇順)＝P1/P2、前回位置に近い組合せを維持。片方欠けは空きスロットへ。
+// 手でも顔でも共通（det は palm を必ず持つ）。
+function assignDets(dets, nowS) {
+  if (dets.length >= 2) {
+    dets.sort((a,b) => a.palm.x - b.palm.x);
+    const [a, b] = dets;
+    const straight = dist(a.palm.x,a.palm.y,hands[0].palmS.x,hands[0].palmS.y)
+                   + dist(b.palm.x,b.palm.y,hands[1].palmS.x,hands[1].palmS.y);
+    const crossed  = dist(a.palm.x,a.palm.y,hands[1].palmS.x,hands[1].palmS.y)
+                   + dist(b.palm.x,b.palm.y,hands[0].palmS.x,hands[0].palmS.y);
+    const pair = (hands[0].present && hands[1].present && crossed < straight) ? [b, a] : [a, b];
+    applyDet(hands[0], pair[0], nowS);
+    applyDet(hands[1], pair[1], nowS);
+  } else if (dets.length === 1) {
+    const d = dets[0];
+    const p0 = hands[0].present, p1 = hands[1].present;
+    let target;
+    if (p0 && p1) {
+      const d0 = dist(d.palm.x,d.palm.y,hands[0].palmS.x,hands[0].palmS.y);
+      const d1 = dist(d.palm.x,d.palm.y,hands[1].palmS.x,hands[1].palmS.y);
+      target = d0 <= d1 ? hands[0] : hands[1];
+    } else if (p0 !== p1) {
+      const pres = p0 ? hands[0] : hands[1];
+      const other = p0 ? hands[1] : hands[0];
+      const dp = dist(d.palm.x, d.palm.y, pres.palmS.x, pres.palmS.y);
+      target = dp < W * 0.18 ? pres : other;
+    } else {
+      target = d.palm.x < W/2 ? hands[0] : hands[1];
+    }
+    applyDet(target, d, nowS);
+  }
+  for (const h of hands) if (nowS - h.lastSeen > 0.35) { h.present = false; h.faceSrc = null; }
+}
+function applyDet(h, d, nowS) {
+  const first = !h.present;
+  h.present = true; h.lastSeen = nowS;
+  if (d.isFace) {
+    // 顔モード：グー/パーは無し。常に open（=バー常時ON）
+    h.faceSrc = d.faceSrc; h.faceR = d.faceR;
+    if (first) h.faceRS = d.faceR;
+    if (typeof d.roll === 'number') { h.roll = d.roll; if (first) h.rollS = d.roll; }
+    h.open = true; h.openness = 1.5;
+    h.palm = d.palm; h.size = d.size;
+    if (first) { h.palmS.x = d.palm.x; h.palmS.y = d.palm.y; }
+    return;
+  }
+  h.faceSrc = null;
+  h.pts = d.pts; h.size = d.size; h.openness = d.openness;
+  h.palm = d.palm;
+  if (first) { h.palmS.x = d.palm.x; h.palmS.y = d.palm.y; }
+  // パー/グー ヒステリシス
+  if (!h.open && d.openness > CFG.openThresh) h.open = true;
+  else if (h.open && d.openness < CFG.closeThresh) h.open = false;
+}
+function smoothHands(dt) {
+  const k = 1 - Math.pow(0.0001, dt);   // フレームレート非依存の追従
+  const kr = 1 - Math.pow(0.02, dt);    // 半径はゆっくり追従（顔サイズの揺れを吸収）
+  const ka = 1 - Math.pow(0.005, dt);   // 傾きはさらにゆっくり（バーのブレ防止）
+  for (const h of hands) {
+    h.palmS.x = lerp(h.palmS.x, h.palm.x, k);
+    h.palmS.y = lerp(h.palmS.y, h.palm.y, k);
+    h.faceRS = lerp(h.faceRS, h.faceR, kr);
+    h.rollS = lerp(h.rollS, h.roll, ka);
+  }
+}
+
+/* ============================================================
+   6.5 プレビューモード（カメラなし・タッチが手のひらになる）
+============================================================ */
+let previewMode = false;
+const pvTouches = new Map();
+function enablePreview() {
+  previewMode = true;
+  initAudio();
+  document.getElementById('ovRotate').classList.add('hidden');
+  document.getElementById('scaleBtn').style.display = 'block';
+  document.getElementById('ovBoot').classList.add('hidden');
+  setState(STATE.TITLE);
+}
+// 21関節テンプレート（親指→小指）。単位は手サイズ比、yは上向き正
+const SYNTH_OPEN = [
+  [0,-0.55],
+  [-0.30,-0.36],[-0.50,-0.16],[-0.62,0.02],[-0.70,0.17],
+  [-0.25,0.06],[-0.29,0.38],[-0.31,0.61],[-0.32,0.80],
+  [-0.05,0.09],[-0.05,0.44],[-0.05,0.70],[-0.05,0.92],
+  [0.15,0.06],[0.17,0.38],[0.18,0.62],[0.19,0.82],
+  [0.33,-0.01],[0.38,0.24],[0.41,0.42],[0.43,0.58],
+];
+const SYNTH_FIST = [
+  [0,-0.55],
+  [-0.30,-0.34],[-0.44,-0.14],[-0.40,0.04],[-0.28,0.10],
+  [-0.25,0.06],[-0.28,0.24],[-0.26,0.12],[-0.24,-0.02],
+  [-0.05,0.09],[-0.06,0.28],[-0.05,0.14],[-0.05,-0.02],
+  [0.15,0.06],[0.16,0.26],[0.16,0.12],[0.15,-0.02],
+  [0.33,-0.01],[0.36,0.18],[0.36,0.06],[0.35,-0.05],
+];
+function makeSynthPts(cx, cy, size, curl, mirror) {
+  const scale = size * 1.7, mx = mirror ? -1 : 1;
+  const pts = [];
+  for (let i = 0; i < 21; i++) {
+    const ox = lerp(SYNTH_OPEN[i][0], SYNTH_FIST[i][0], curl) * mx;
+    const oy = lerp(SYNTH_OPEN[i][1], SYNTH_FIST[i][1], curl);
+    pts.push({ x: cx + ox * scale, y: cy - oy * scale });   // 画面はy下向きなので反転
+  }
+  return pts;
+}
+function updatePreviewHands() {
+  const ts = [...pvTouches.values()];
+  const nowS = performance.now() / 1000;
+  if (ts.length >= 1) {
+    const a = ts[0];
+    const b = ts[1] || { x: W - a.x, y: a.y };   // 2本目はミラー位置に自動生成
+    const [pa, pb] = a.x <= b.x ? [a, b] : [b, a];
+    const assign = (h, p) => {
+      const first = !h.present;
+      h.present = true; h.lastSeen = nowS;
+      h.palm = { x: p.x, y: p.y };
+      if (first) { h.palmS.x = p.x; h.palmS.y = p.y; }
+      h.size = 64;
+      h.open = true;
+      h.openness = 1.5;
+      h.curl = lerp(h.curl, 0, 0.28);
+      h.pts = makeSynthPts(h.palmS.x, h.palmS.y, h.size, h.curl, h.id === 1);
+    };
+    assign(hands[0], pa); assign(hands[1], pb);
+  } else {
+    hands[0].present = false; hands[1].present = false;
+  }
+}
+
+
+const pieces = [];
+let spawnT = 0;
+let basketX = 0;         // カゴ中心X（movingBasketで移動）
+let basketTargetX = 0;
+let basketMoveT = 0;
+let netPieces = [];      // カゴに入った柿ピー（見た目用）
+let flashA = 0;          // 画面フラッシュ
+let shocks = [];         // 衝撃波リング
+let comboView = 0;       // 表示用コンボ
+
+function pieceRadius() { return Math.max(18, H * 0.031); }
+function spawnPiece(kind) {
+  if (pieces.length >= CFG.maxPieces) return;
+  const r = pieceRadius();
+  // カゴの真上に降らせない（そのまま入ってフリー得点になるため）
+  const margin = rimHalf() + r * 2.2;
+  const bx = basketX || W/2;
+  const leftW  = Math.max(0, (bx - margin) - W*0.06);
+  const rightW = Math.max(0, W*0.94 - (bx + margin));
+  const x = Math.random() < leftW / (leftW + rightW || 1)
+    ? rnd(W*0.06, Math.max(W*0.06 + 1, bx - margin))
+    : rnd(Math.min(W*0.94 - 1, bx + margin), W*0.94);
+  pieces.push({
+    kind: kind ?? (Math.random() < 0.5 ? 'kaki' : 'peanut'),
+    x, y: -r*2,
+    vx: rnd(-40, 40), vy: rnd(0, 60),
+    rot: rnd(0, TAU), vrot: rnd(-3, 3),
+    r, hitCd: 0, scored: false
+  });
+}
+function rimY() { return H * 0.175; }
+function rimHalf() { return W * CFG.rimHalf; }
+
+function updatePieces(dt) {
+  const ry = rimY(), rh = rimHalf(), cx = basketX || W/2;
+  for (let i = pieces.length-1; i >= 0; i--) {
+    const p = pieces[i];
+    const prevY = p.y;
+    // ピーナッツはちょっと軽い
+    const g = CFG.gravity * (p.kind === 'peanut' ? 0.85 : 1);
+    p.vy += g * dt;
+    p.vx *= (1 - 0.12*dt);
+    p.x += p.vx * dt; p.y += p.vy * dt;
+    p.rot += p.vrot * dt;
+    p.hitCd -= dt;
+    // 左右の壁で跳ね返り
+    if (p.x < p.r && p.vx < 0) { p.x = p.r; p.vx *= -0.7; }
+    if (p.x > W - p.r && p.vx > 0) { p.x = W - p.r; p.vx *= -0.7; }
+    // 頭上バーとの衝突（プレイ中のみ・各プレイヤーぶん）
+    if (state === STATE.PLAY && p.hitCd <= 0) {
+      for (const h of hands) {
+        if (h.bar.active && collideBar(p, h.bar)) break;
+      }
+    }
+    // カゴふちの吸い込み救済（惜しい球をそっと中央へ）
+    if (CFG.magnet > 0 && p.y < ry + H*0.1 && p.y > ry - H*0.16 &&
+        Math.abs(p.x - cx) < rh * 1.7) {
+      p.vx += (cx - p.x) * CFG.magnet * dt;
+    }
+    // カゴのふち：上から開口部へ落ちてくる球は角に当たっても弾かない（甘め判定）
+    const enteringFromAbove = p.vy > 0 && p.y < ry + p.r &&
+        p.x > cx - rh - p.r && p.x < cx + rh + p.r;
+    if (enteringFromAbove) {
+      // 角にかすった球はそっと中央へ寄せて入れてあげる
+      if (Math.abs(p.x - cx) > rh - p.r) p.vx += (cx - p.x) * 4 * dt;
+    } else {
+      // 下や横から来た球だけ、小さく・やわらかく弾く
+      for (const ex of [cx - rh, cx + rh]) {
+        const d = dist(p.x, p.y, ex, ry);
+        if (d < p.r + 5) {
+          const nx = (p.x - ex) / (d || 1), ny = (p.y - ry) / (d || 1);
+          const dot = p.vx*nx + p.vy*ny;
+          if (dot < 0) { p.vx -= 1.15*dot*nx; p.vy -= 1.15*dot*ny; }
+          p.x = ex + nx * (p.r + 5); p.y = ry + ny * (p.r + 5);
+        }
+      }
+    }
+    // ゴール判定：上から開口部を通って落ちてきた
+    if (state === STATE.PLAY && !p.scored &&
+        prevY < ry && p.y >= ry && p.vy > 0 &&
+        p.x > cx - rh + p.r*0.4 && p.x < cx + rh - p.r*0.4) {
+      p.scored = true;
+      onGoal(p);
+      pieces.splice(i, 1);
+      continue;
+    }
+    // 画面下に落ちたら消す
+    if (p.y > H + p.r*3) pieces.splice(i, 1);
+  }
+}
+function collideBar(p, bar) {
+  const ax = bar.ax, ay = bar.ay, bx = bar.bx, by = bar.by;
+  const dx = bx - ax, dy = by - ay;
+  const len2 = dx*dx + dy*dy;
+  if (len2 < 100) return false;
+  const t = clamp(((p.x-ax)*dx + (p.y-ay)*dy) / len2, 0, 1);
+  const qx = ax + dx*t, qy = ay + dy*t;
+  const d = dist(p.x, p.y, qx, qy);
+  const barR = 10 + bar.power * 7;
+  if (d > p.r + barR) return false;
+  const len = Math.sqrt(len2);
+  // バーの法線（うえむき側を優先）
+  let nx = -dy/len, ny = dx/len;
+  if (ny > 0) { nx = -nx; ny = -ny; }
+  const pw = bar.power;
+
+  if (CFG.mode === 'B') {
+    // ---- B: トランポリン ----
+    // バーの傾き（=首の傾き）がそのまま発射方向。スピードは一定×パワー
+    const sp = CFG.launchSpeed * (0.85 + pw*0.25);
+    p.vx = nx * sp;
+    p.vy = ny * sp;
+  } else {
+    // ---- A: ミラー反射（入射角＝反射角、上ブーストなし） ----
+    let rnx = (p.x - qx) / (d || 1), rny = (p.y - qy) / (d || 1);
+    const dot = p.vx*rnx + p.vy*rny;
+    if (dot < 0) {
+      const rest = 0.8 + pw * 0.25;
+      p.vx -= (1 + rest) * dot * rnx;
+      p.vy -= (1 + rest) * dot * rny;
+    }
+    const spd = Math.hypot(p.vx, p.vy);
+    const minSpd = 420 * pw;
+    if (spd < minSpd && spd > 0) { p.vx *= minSpd/spd; p.vy *= minSpd/spd; }
+  }
+  p.vrot = rnd(-6, 6);
+  const pushOut = p.r + barR + 1;
+  p.x = qx + nx * pushOut; p.y = qy + ny * pushOut;
+  p.hitCd = 0.13;
+  burst(qx, qy, 6, 260, { grav: 300 });
+  if (state === STATE.PLAY) { sHitCombo(); comboView = SND.combo; }
+  return true;
+}
+function onGoal(p) {
+  score++;
+  sGoal();
+  flashA = Math.max(flashA, 0.18);
+  burst(p.x, rimY() + 20, 14, 300, { grav: 500 });
+  // ネットの中にたまる見た目（カゴ相対座標）
+  if (netPieces.length < 14) {
+    netPieces.push({ kind: p.kind,
+      dx: rnd(-rimHalf()*0.55, rimHalf()*0.55),
+      y: rimY() + rnd(H*0.055, H*0.085),
+      rot: rnd(0, TAU) });
+  }
+}
+
+// 各プレイヤーの頭上に、首の傾きで傾く跳ね返しバーを作る（1人でも2人でも同じ）
+function updateBars() {
+  for (const h of hands) {
+    if (!h.present) { h.bar.active = false; continue; }
+    const R = Math.max(30, h.faceRS);
+    const cx = h.palmS.x;
+    const cy = h.palmS.y - R * BAR_GAP;      // 頭上
+    const half = R * BAR_LEN;
+    const a = h.rollS || 0;
+    const dx = Math.cos(a) * half, dy = Math.sin(a) * half;
+    h.bar.ax = cx - dx; h.bar.ay = cy - dy;
+    h.bar.bx = cx + dx; h.bar.by = cy + dy;
+    h.bar.power = CFG.beamPower;
+    h.bar.active = true;
+  }
+}
+
+/* ============================================================
+   8. 描画
+============================================================ */
+let noSeed = 0;
+function drawBackground(t) {
+  ctx.drawImage(bgCanvas, 0, 0);
+  // スポットライト（回転する光の帯 ×2）
+  ctx.globalCompositeOperation = 'lighter';
+  for (let i = 0; i < 2; i++) {
+    const px = i === 0 ? W*0.06 : W*0.94;
+    const ang = Math.sin(t*0.5 + i*2.6) * 0.55 + (i===0 ? -0.5 : -Math.PI+0.5);
+    ctx.save();
+    ctx.translate(px, H*0.98); ctx.rotate(ang);
+    const gr = ctx.createLinearGradient(0,0,0,-H*1.2);
+    gr.addColorStop(0, i===0 ? 'rgba(87,180,255,0.12)' : 'rgba(255,122,217,0.10)');
+    gr.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = gr;
+    ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(-H*0.16,-H*1.2); ctx.lineTo(H*0.16,-H*1.2);
+    ctx.closePath(); ctx.fill();
+    ctx.restore();
+  }
+  // 電飾きらめき
+  for (const l of lights) {
+    const tw = 0.55 + 0.45 * Math.sin(t*2.2 + l.ph);
+    ctx.globalAlpha = tw;
+    const s = 26 * l.s;
+    ctx.drawImage(SPR.bokeh, l.x - s/2, l.y - s/2, s, s);
+  }
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = 'source-over';
+  // ラスト10秒の赤熱
+  if (state === STATE.PLAY && timeLeft <= 10) {
+    const pulse = 0.10 + 0.08 * Math.sin(t*9);
+    ctx.fillStyle = `rgba(255,30,10,${pulse})`;
+    ctx.fillRect(0, 0, W, H);
+  }
+}
+function drawBasket() {
+  const ry = rimY(), rh = rimHalf(), cx = basketX || W/2;
+  const depth = H * 0.10;
+  // ポール（上から）
+  ctx.strokeStyle = '#c62615'; ctx.lineWidth = 10; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(cx, 0); ctx.lineTo(cx, ry - depth*0.1); ctx.stroke();
+  ctx.strokeStyle = 'rgba(255,255,255,.35)'; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.moveTo(cx-2, 0); ctx.lineTo(cx-2, ry - depth*0.1); ctx.stroke();
+  // ネット奥ライン
+  ctx.strokeStyle = 'rgba(255,255,255,.75)'; ctx.lineWidth = 2.5;
+  const bw = rh * 0.55;
+  for (let i = 0; i <= 6; i++) {
+    const tt = i / 6;
+    ctx.beginPath();
+    ctx.moveTo(lerp(cx-rh, cx+rh, tt), ry);
+    ctx.lineTo(lerp(cx-bw, cx+bw, tt), ry + depth);
+    ctx.stroke();
+  }
+  // 入った柿ピー
+  for (const np of netPieces) {
+    const spr = np.kind === 'kaki' ? SPR.kaki : SPR.peanut;
+    const s = pieceRadius() * 2.0;
+    ctx.save(); ctx.translate(cx + np.dx, np.y); ctx.rotate(np.rot);
+    ctx.drawImage(spr, -s/2, -s/2, s, s); ctx.restore();
+  }
+  // ネット手前（横ライン）
+  ctx.strokeStyle = 'rgba(255,255,255,.85)';
+  for (let i = 1; i <= 3; i++) {
+    const tt = i / 3.2;
+    const hw = lerp(rh, bw, tt);
+    ctx.beginPath();
+    ctx.moveTo(cx - hw, ry + depth*tt);
+    ctx.quadraticCurveTo(cx, ry + depth*tt + 8, cx + hw, ry + depth*tt);
+    ctx.stroke();
+  }
+  ctx.beginPath();
+  ctx.moveTo(cx - bw, ry + depth);
+  ctx.quadraticCurveTo(cx, ry + depth + 8, cx + bw, ry + depth);
+  ctx.stroke();
+  // リム（赤いふち）
+  ctx.strokeStyle = '#e6301c'; ctx.lineWidth = 11; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(cx - rh, ry); ctx.lineTo(cx + rh, ry); ctx.stroke();
+  ctx.strokeStyle = 'rgba(255,255,255,.5)'; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.moveTo(cx - rh + 4, ry - 3); ctx.lineTo(cx + rh - 4, ry - 3); ctx.stroke();
+  ctx.fillStyle = '#e6301c';
+  for (const ex of [cx-rh, cx+rh]) { ctx.beginPath(); ctx.arc(ex, ry, 9, 0, TAU); ctx.fill(); }
+}
+function drawPieces() {
+  for (const p of pieces) {
+    const spr = p.kind === 'kaki' ? SPR.kaki : SPR.peanut;
+    const s = p.r * 2.4;
+    ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.rot);
+    ctx.drawImage(spr, -s/2, -s/2, s, s); ctx.restore();
+  }
+}
+function jitteredLine(ax, ay, bx, by, mag, segs, seed) {
+  ctx.beginPath(); ctx.moveTo(ax, ay);
+  const dx = bx-ax, dy = by-ay;
+  const len = Math.hypot(dx,dy) || 1;
+  const nx = -dy/len, ny = dx/len;
+  for (let i = 1; i < segs; i++) {
+    const t = i / segs;
+    const wob = Math.sin(t*Math.PI) * mag;
+    const off = (Math.sin(seed*13.7 + i*5.3) + Math.sin(seed*7.1 + i*11.9)*0.5) * wob;
+    ctx.lineTo(ax + dx*t + nx*off, ay + dy*t + ny*off);
+  }
+  ctx.lineTo(bx, by); ctx.stroke();
+}
+function drawBar(bar, t) {
+  if (!bar.active) return;
+  noSeed = t * 30 + bar.ax * 0.01;
+  const pw = bar.power;
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  const layers = [
+    ['rgba(60,120,255,0.16)', (30 + pw*16), 20],
+    ['rgba(87,190,255,0.35)', (14 + pw*9), 15],
+    ['rgba(190,240,255,0.7)', (6 + pw*4), 11],
+    ['rgba(255,255,255,1)',   (2.5 + pw*1.2), 8],
+  ];
+  for (let li = 0; li < layers.length; li++) {
+    const [col, w, mag] = layers[li];
+    ctx.strokeStyle = col; ctx.lineWidth = w;
+    jitteredLine(bar.ax, bar.ay, bar.bx, bar.by, mag * (0.6 + pw*0.3), 10, noSeed + li*3);
+  }
+  // 端の光球
+  for (const [ex, ey] of [[bar.ax,bar.ay],[bar.bx,bar.by]]) {
+    const s = 40 + pw*18 + Math.sin(t*20)*5;
+    ctx.drawImage(SPR.glow, ex - s/2, ey - s/2, s, s);
+  }
+  ctx.globalCompositeOperation = 'source-over';
+}
+// 指のつながり（親指→小指、各指のチェーン）
+const FINGERS = [[0,1,2,3,4],[0,5,6,7,8],[0,9,10,11,12],[0,13,14,15,16],[0,17,18,19,20]];
+function paintHandShape(g, h, col, extraW) {
+  const S = h.size;
+  g.strokeStyle = col; g.fillStyle = col;
+  g.lineCap = 'round'; g.lineJoin = 'round';
+  // 手のひら：関節0,1,5,9,13,17の多角形＋丸ストロークでぷっくり
+  g.beginPath();
+  g.moveTo(h.pts[0].x, h.pts[0].y);
+  for (const idx of [1,5,9,13,17]) g.lineTo(h.pts[idx].x, h.pts[idx].y);
+  g.closePath(); g.fill();
+  g.lineWidth = S*0.34 + extraW; g.stroke();
+  // 指：つけ根→先で細くなるカプセル
+  for (const chain of FINGERS) {
+    for (let i = 1; i < chain.length - 1; i++) {
+      g.lineWidth = Math.max(4, S*(0.36 - (i-1)*0.045) + extraW);
+      g.beginPath();
+      g.moveTo(h.pts[chain[i]].x, h.pts[chain[i]].y);
+      g.lineTo(h.pts[chain[i+1]].x, h.pts[chain[i+1]].y);
+      g.stroke();
+    }
+  }
+}
+function drawHand(h, t) {
+  if (!h.present || !h.pts.length || !handCtx) return;
+  const lw = clamp(h.size * 0.42, 10, 30);
+  // バウンディングボックス（この範囲だけレイヤーを使う）
+  let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+  for (const p of h.pts) {
+    if (p.x < x0) x0 = p.x; if (p.x > x1) x1 = p.x;
+    if (p.y < y0) y0 = p.y; if (p.y > y1) y1 = p.y;
+  }
+  const pad = h.size * 0.8;
+  const bx = clamp(x0 - pad, 0, W), by = clamp(y0 - pad, 0, H);
+  const bw = clamp(x1 + pad, 0, W) - bx, bh = clamp(y1 + pad, 0, H) - by;
+  if (bw > 2 && bh > 2) {
+    // 不透明レイヤーに フチ→本体→ハイライト の順で描く（重なりムラなし）
+    const g = handCtx;
+    g.save();
+    g.beginPath(); g.rect(bx, by, bw, bh); g.clip();
+    g.clearRect(bx, by, bw, bh);
+    paintHandShape(g, h, h.edgeCol, 7);      // あかるいフチ
+    paintHandShape(g, h, h.fillCol, 0);      // 本体
+    // 手のひらのつや
+    g.fillStyle = 'rgba(255,255,255,0.35)';
+    g.beginPath();
+    g.ellipse(h.palmS.x - h.size*0.12, h.palmS.y - h.size*0.18, h.size*0.30, h.size*0.18, -0.5, 0, TAU);
+    g.fill();
+    g.restore();
+    // うしろにやわらかいグロー → 手を半透明で合成
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = 0.4;
+    const gs = h.size * 3.4;
+    ctx.drawImage(SPR.glow, h.palmS.x - gs/2, h.palmS.y - gs/2, gs, gs);
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = 0.86;
+    ctx.drawImage(handLayer, bx, by, bw, bh, bx, by, bw, bh);
+    ctx.globalAlpha = 1;
+  }
+  // 手のひらのプレイヤーマーク
+  ctx.fillStyle = 'rgba(6,4,20,.75)';
+  ctx.beginPath(); ctx.arc(h.palmS.x, h.palmS.y, lw*0.85, 0, TAU); ctx.fill();
+  ctx.strokeStyle = h.color; ctx.lineWidth = 3; ctx.stroke();
+  ctx.fillStyle = '#fff';
+  ctx.font = `800 ${Math.round(lw*0.9)}px "M PLUS Rounded 1c", sans-serif`;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(h.id === 0 ? '①' : '②', h.palmS.x, h.palmS.y + 1);
+  // デバッグ：ランドマーク
+  if (CFG.showLandmarks) {
+    ctx.fillStyle = '#ffe63b';
+    for (const p of h.pts) { ctx.beginPath(); ctx.arc(p.x, p.y, 3, 0, TAU); ctx.fill(); }
+    ctx.font = '700 12px monospace'; ctx.fillStyle = '#8ef2ff';
+    ctx.fillText(h.openness.toFixed(2), h.palmS.x, h.palmS.y - lw*1.8);
+  }
+}
+// 顔カーソル：本物の顔をミラーで円形に切り抜き＋発光フチ＋番号バッジ
+function drawFace(h, t) {
+  if (!h.present) return;
+  const cx = h.palmS.x, cy = h.palmS.y;
+  const R = h.faceRS;
+  // うしろのやわらかいグロー（プレイヤー色）
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.globalAlpha = 0.28 + Math.sin(t * 3 + h.id) * 0.05;
+  ctx.fillStyle = h.color;
+  ctx.beginPath(); ctx.arc(cx, cy, R * 1.28, 0, TAU); ctx.fill();
+  ctx.restore();
+
+  const hasVid = h.faceSrc && video.readyState >= 2 && video.videoWidth > 0;
+  if (hasVid) {
+    const vw = video.videoWidth, vh = video.videoHeight;
+    const fs = h.faceSrc;
+    // 切り抜き元(正方形)が映像外にはみ出す分は、元・先を同じ割合でクランプして歪ませない
+    const fl = Math.max(0, -fs.sx) / fs.side;
+    const ft = Math.max(0, -fs.sy) / fs.side;
+    const fr = Math.max(0, (fs.sx + fs.side) - vw) / fs.side;
+    const fb = Math.max(0, (fs.sy + fs.side) - vh) / fs.side;
+    const sx = fs.sx + fl * fs.side, sy = fs.sy + ft * fs.side;
+    const sw = fs.side * (1 - fl - fr), sh = fs.side * (1 - ft - fb);
+    const D = 2 * R;
+    const dl = (cx - R) + fl * D, dt2 = (cy - R) + ft * D;
+    const dw = D * (1 - fl - fr), dh = D * (1 - ft - fb);
+    if (sw > 1 && sh > 1 && dw > 1 && dh > 1) {
+      ctx.save();
+      ctx.beginPath(); ctx.arc(cx, cy, R * 0.99, 0, TAU); ctx.clip();
+      // 左右ミラー（手の描画と同じく鏡像に）
+      ctx.translate(cx, cy); ctx.scale(-1, 1); ctx.translate(-cx, -cy);
+      ctx.drawImage(video, sx, sy, sw, sh, dl, dt2, dw, dh);
+      ctx.restore();
+    }
+  } else {
+    // プレビュー/映像なし → プレーンな丸カーソル
+    ctx.fillStyle = 'rgba(6,4,20,.5)';
+    ctx.beginPath(); ctx.arc(cx, cy, R * 0.99, 0, TAU); ctx.fill();
+  }
+
+  // 発光フチ（外・プレイヤー色 / 内・淡色）
+  ctx.lineWidth = Math.max(5, R * 0.11);
+  ctx.strokeStyle = h.color;
+  ctx.beginPath(); ctx.arc(cx, cy, R * 0.99, 0, TAU); ctx.stroke();
+  ctx.lineWidth = Math.max(2, R * 0.045);
+  ctx.strokeStyle = h.edgeCol;
+  ctx.beginPath(); ctx.arc(cx, cy, R * 0.9, 0, TAU); ctx.stroke();
+
+  // プレイヤー番号バッジ（顔の下）
+  const lw = clamp(R * 0.32, 13, 26);
+  const bx = cx, by = cy + R * 0.86;
+  ctx.fillStyle = 'rgba(6,4,20,.82)';
+  ctx.beginPath(); ctx.arc(bx, by, lw * 0.95, 0, TAU); ctx.fill();
+  ctx.strokeStyle = h.color; ctx.lineWidth = 3; ctx.stroke();
+  ctx.fillStyle = '#fff';
+  ctx.font = `800 ${Math.round(lw * 1.05)}px "M PLUS Rounded 1c", sans-serif`;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(h.id === 0 ? '①' : '②', bx, by + 1);
+
+  if (CFG.showLandmarks) {
+    ctx.strokeStyle = '#ffe63b'; ctx.lineWidth = 1;
+    ctx.strokeRect(cx - R, cy - R, 2 * R, 2 * R);
+  }
+}
+// ド派手バナー文字（黒ふち→色ふち→本体）
+function banner(text, x, y, size, fill='#ff2f1e', edge='#fff', font='"Reggae One"') {
+  ctx.font = `${size}px ${font}, sans-serif`;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.lineJoin = 'round';
+  ctx.strokeStyle = '#1a0500'; ctx.lineWidth = size * 0.26; ctx.strokeText(text, x, y + size*0.06);
+  ctx.strokeStyle = edge; ctx.lineWidth = size * 0.13; ctx.strokeText(text, x, y);
+  ctx.fillStyle = fill; ctx.fillText(text, x, y);
+}
+function drawShocks(dt) {
+  for (let i = shocks.length-1; i >= 0; i--) {
+    const s = shocks[i];
+    s.age += dt;
+    if (s.age > s.life) { shocks.splice(i,1); continue; }
+    const tt = s.age / s.life;
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.strokeStyle = `rgba(180,240,255,${(1-tt)*0.9})`;
+    ctx.lineWidth = 14 * (1-tt) + 2;
+    ctx.beginPath(); ctx.arc(s.x, s.y, 20 + tt * W*0.55, 0, TAU); ctx.stroke();
+    ctx.globalCompositeOperation = 'source-over';
+  }
+}
+
+/* ============================================================
+   9. HUD・各ステート画面
+============================================================ */
+function drawHUD(t) {
+  // タイマー（左上）
+  const sec = Math.ceil(timeLeft);
+  const rush = timeLeft <= 10;
+  const tx = W*0.09, ty = H*0.12;
+  ctx.fillStyle = 'rgba(6,4,20,.6)';
+  ctx.beginPath(); ctx.arc(tx, ty, H*0.075, 0, TAU); ctx.fill();
+  ctx.strokeStyle = rush ? '#ff3b2f' : '#57e8ff'; ctx.lineWidth = 5;
+  ctx.beginPath();
+  ctx.arc(tx, ty, H*0.075, -Math.PI/2, -Math.PI/2 + TAU * (timeLeft / CFG.playTime));
+  ctx.stroke();
+  const pulse = rush ? 1 + Math.sin(t*10)*0.1 : 1;
+  banner(String(sec), tx, ty, H*0.075*pulse, rush ? '#ff3b2f' : '#fff', rush ? '#ffe63b' : '#2a6cff');
+  // スコア（右上）
+  const sx = W*0.90, sy = H*0.115;
+  banner(`${score}`, sx - H*0.048, sy, H*0.085, '#ffe63b', '#c62615');
+  banner(`/${CFG.target}こ`, sx + H*0.062, sy + H*0.012, H*0.045, '#fff', '#c62615');
+  // コンボ
+  if (SND.comboT > 0 && comboView >= 3) {
+    banner(`${comboView} コンボ！`, W/2, H*0.4, H*0.05 + Math.min(comboView,10)*2, '#8dff6b', '#0a4d00');
+  }
+  // カーソルが見えないときのヒント
+  if (!hands[0].present && !hands[1].present) {
+    const hint = previewMode ? '画面に タッチして！' : 'カメラに 顔を 見せて！';
+    if (Math.floor(t*2) % 2 === 0)
+      banner(hint, W/2, H*0.62, H*0.052, '#fff', '#c62615');
+  }
+}
+function drawTitle(t) {
+  const bob = Math.sin(t*1.6) * 8;
+  banner('ふたりで協力！', W/2, H*0.16 + bob*0.4, H*0.055, '#ffe63b', '#c62615');
+  banner('柿ピー玉入れ', W/2, H*0.30 + bob, H*0.135, '#ff2f1e', '#ffe63b');
+  banner(previewMode ? 'タッチであそぶ' : 'フェイストラッキング', W/2, H*0.42 + bob*0.6, H*0.042, '#57e8ff', '#0a2a70');
+  // スタート待機：顔が1つでも見えていればOK（1人でもあそべる）
+  const n = (hands[0].present?1:0) + (hands[1].present?1:0);
+  const ready = n >= 1;
+  const need = 1.5;
+  if (ready) {
+    banner(`そのまま ${Math.max(1, Math.ceil(need - titleHold))} …`, W/2, H*0.62, H*0.06, '#8dff6b', '#0a4d00');
+  } else {
+    const wait = previewMode ? '画面を タッチしてね' : 'カメラに 顔を 見せてね';
+    if (Math.floor(t*1.4) % 2 === 0)
+      banner(wait, W/2, H*0.62, H*0.05, '#fff', '#c62615');
+  }
+  if (!previewMode)
+    banner(`みつけた顔 ${n}人`, W/2, H*0.72, H*0.035, '#dcd6ff', '#3a2f80');
+  banner('あたまを かたむけて はねかえす角度を ねらえ！', W/2, H*0.85, H*0.036, '#ffe63b', '#6b3800');
+  banner('頭の上のバーで 柿ピーを カゴに いれよう！', W/2, H*0.92, H*0.033, '#ff9df0', '#701a5e');
+}
+function drawCountdown() {
+  const n = 3 - Math.floor(stateT);
+  const frac = 1 - (stateT % 1);
+  const size = H * (0.22 + 0.3 * frac);
+  ctx.fillStyle = `rgba(255,255,255,${frac * 0.12})`;
+  ctx.fillRect(0, 0, W, H);
+  if (n > 0) banner(String(n), W/2, H/2, size, '#ffe63b', '#c62615');
+  else banner('スタート！', W/2, H/2, H*0.16, '#8dff6b', '#0a4d00');
+}
+function drawResult(t) {
+  ctx.fillStyle = 'rgba(6,4,22,.55)';
+  ctx.fillRect(0, 0, W, H);
+  if (won) {
+    const bob = Math.sin(t*2.2)*6;
+    banner('おめでとう！！', W/2, H*0.27 + bob, H*0.13, '#ffe63b', '#c62615');
+    banner('柿ピーを差し上げます 🎁', W/2, H*0.46, H*0.065, '#fff', '#e6301c');
+    banner(`${score}こ 入ったよ！`, W/2, H*0.60, H*0.05, '#8dff6b', '#0a4d00');
+  } else {
+    banner('ざんねん…', W/2, H*0.30, H*0.12, '#9a8fd0', '#241a55');
+    banner('柿ピーゲットならず…', W/2, H*0.47, H*0.062, '#dcd6ff', '#241a55');
+    banner(`${score}こ おしかった！`, W/2, H*0.59, H*0.048, '#fff', '#3a2f80');
+  }
+  if (stateT > 1.5) {
+    const blink = Math.floor(t*1.6) % 2 === 0;
+    if (blink) banner('画面タップで もういちど！', W/2, H*0.78, H*0.045, '#ffe63b', '#6b3800');
+  }
+}
+
+/* ============================================================
+   10. ステート遷移・メインループ
+============================================================ */
+let titleHold = 0;
+let cdLastN = 4;
+let resultFx = 0;
+
+function setState(s) {
+  state = s; stateT = 0;
+  if (s === STATE.TITLE) {
+    score = 0; timeLeft = CFG.playTime;
+    pieces.length = 0; netPieces = []; titleHold = 0;
+    SND.combo = 0; comboView = 0;
+    for (const h of hands) h.bar.active = false;
+    stopBGM();
+  }
+  if (s === STATE.COUNTDOWN) { cdLastN = 4; }
+  if (s === STATE.PLAY) {
+    score = 0; timeLeft = CFG.playTime;
+    pieces.length = 0; netPieces = []; spawnT = 0;
+    basketX = W/2; basketTargetX = W/2; basketMoveT = 4;
+    SND.bpm = CFG.bpm;
+    startBGM();
+  }
+  if (s === STATE.RESULT) {
+    stopBGM();
+    won = score >= CFG.target;
+    resultFx = 0;
+    if (won) sWin(); else sLose();
+  }
+}
+
+let lastT = performance.now();
+let fpsAcc = 0, fpsN = 0, fpsView = 60;
+
+function loop(now) {
+  requestAnimationFrame(loop);
+  const dt = Math.min((now - lastT) / 1000, 0.05);
+  lastT = now;
+  stateT += dt;
+  const t = now / 1000;
+  fpsAcc += dt; fpsN++;
+  if (fpsAcc > 0.5) { fpsView = Math.round(fpsN / fpsAcc); fpsAcc = 0; fpsN = 0; updateDbgStat(); }
+
+  if (previewMode) updatePreviewHands();
+  else runInference(now);
+  smoothHands(dt);
+  updateBars();
+  SND.comboT -= dt;
+  if (SND.comboT <= 0) SND.combo = 0;
+
+  // --- ステート更新 ---
+  if (state === STATE.TITLE) {
+    // 顔が1つでも見えていればOK（1人でもあそべる）
+    const ready = hands[0].present || hands[1].present;
+    titleHold = ready ? titleHold + dt : 0;
+    if (titleHold > 1.5) setState(STATE.COUNTDOWN);
+    // かざってる柿ピーがぱらぱら
+    if (Math.random() < dt * 0.8 && pieces.length < 5) spawnPiece();
+    updatePieces(dt);
+  }
+  else if (state === STATE.COUNTDOWN) {
+    const n = 3 - Math.floor(stateT);
+    if (n !== cdLastN) { cdLastN = n; if (n > 0) sCount(false); else sCount(true); }
+    if (stateT >= 3.6) setState(STATE.PLAY);
+  }
+  else if (state === STATE.PLAY) {
+    timeLeft -= dt;
+    SND.bpm = timeLeft <= 10 ? 138 : CFG.bpm;
+    if (CFG.movingBasket) {
+      basketMoveT -= dt;
+      if (basketMoveT <= 0) {
+        basketMoveT = 8;
+        const spots = [W*0.28, W*0.5, W*0.72].filter(x => Math.abs(x - basketTargetX) > W*0.1);
+        basketTargetX = spots[(Math.random()*spots.length)|0] || W*0.5;
+      }
+      basketX += (basketTargetX - basketX) * Math.min(1, dt*2.5);
+    }
+    spawnT -= dt;
+    if (spawnT <= 0) { spawnPiece(); spawnT = CFG.spawnInterval / 1000; }
+    updatePieces(dt);
+    if (timeLeft <= 0 || score >= CFG.target) {
+      if (score >= CFG.target) timeLeft = Math.max(timeLeft, 0);
+      setState(STATE.RESULT);
+    }
+  }
+  else if (state === STATE.RESULT) {
+    resultFx += dt;
+    if (won && resultFx > 0.05) {   // 紙吹雪
+      resultFx = 0;
+      for (let i = 0; i < 3; i++) {
+        spawnParticle({ x: rnd(0, W), y: -20, vx: rnd(-60, 60), vy: rnd(80, 220),
+          life: rnd(1.6, 2.6), size: rnd(10, 20), grav: 160,
+          spr: SPR.confetti[(Math.random()*SPR.confetti.length)|0],
+          rot: rnd(0, TAU), vrot: rnd(-6, 6) });
+      }
+    }
+    if (stateT > 20) setState(STATE.TITLE);
+  }
+  updateParticles(dt);
+
+  // --- 描画 ---
+  drawBackground(t);
+  drawBasket();
+  if (state !== STATE.RESULT) {
+    drawPieces();
+    for (const h of hands) if (h.bar.active) drawBar(h.bar, t);
+    // プレビュー(タッチ)はぷっくり手、それ以外は顔カーソル
+    const drawCursor = previewMode ? drawHand : drawFace;
+    drawCursor(hands[0], t);
+    drawCursor(hands[1], t);
+  }
+  drawShocks(dt);
+  drawParticles();
+  if (state === STATE.TITLE) drawTitle(t);
+  else if (state === STATE.COUNTDOWN) drawCountdown();
+  else if (state === STATE.PLAY) drawHUD(t);
+  else if (state === STATE.RESULT) drawResult(t);
+
+  if (flashA > 0) {
+    ctx.fillStyle = `rgba(255,255,255,${flashA})`;
+    ctx.fillRect(0, 0, W, H);
+    flashA = Math.max(0, flashA - dt * 2.2);
+  }
+}
+
+/* ============================================================
+   11. 入力（タップ・デバッグパネル）
+============================================================ */
+let cornerTaps = [];
+function canvasPos(e) {
+  const r = canvas.getBoundingClientRect();
+  return { x: e.clientX - r.left, y: e.clientY - r.top };
+}
+canvas.addEventListener('pointerdown', e => {
+  initAudio();
+  const cp = canvasPos(e);
+  if (previewMode) pvTouches.set(e.pointerId, cp);
+  // 左上すみ3回タップ→デバッグ
+  if (cp.x < 90 && cp.y < 90) {
+    const now = performance.now();
+    cornerTaps = cornerTaps.filter(t => now - t < 900);
+    cornerTaps.push(now);
+    if (cornerTaps.length >= 3) {
+      cornerTaps = [];
+      document.getElementById('debug').classList.toggle('show');
+      return;
+    }
+  }
+  if (state === STATE.RESULT && stateT > 1.0) setState(STATE.TITLE);
+});
+canvas.addEventListener('pointermove', e => {
+  if (previewMode && pvTouches.has(e.pointerId))
+    pvTouches.set(e.pointerId, canvasPos(e));
+});
+const pvRelease = e => { if (previewMode) pvTouches.delete(e.pointerId); };
+canvas.addEventListener('pointerup', pvRelease);
+canvas.addEventListener('pointercancel', pvRelease);
+canvas.addEventListener('pointerleave', pvRelease);
+document.getElementById('btnPreview').addEventListener('click', enablePreview);
+const SCALES = [1, 0.85, 0.7, 0.55];
+let scaleIdx = 0;
+document.getElementById('scaleBtn').addEventListener('click', () => {
+  scaleIdx = (scaleIdx + 1) % SCALES.length;
+  viewScale = SCALES[scaleIdx];
+  document.getElementById('scaleBtn').textContent = `表示 ${Math.round(viewScale*100)}%`;
+  resize();
+});
+canvas.addEventListener('touchmove', e => e.preventDefault(), { passive: false });
+
+// --- デバッグパネル配線 ---
+const dbgMap = [
+  ['s_target', 'v_target', 'target', v => v + 'こ', parseInt],
+  ['s_time',   'v_time',   'playTime', v => v + '秒', parseInt],
+  ['s_spawn',  'v_spawn',  'spawnInterval', v => v + 'ms', parseInt],
+  ['s_max',    'v_max',    'maxPieces', v => v + 'こ', parseInt],
+  ['s_power',  'v_power',  'beamPower', v => (+v).toFixed(2), parseFloat],
+  ['s_open',   'v_open',   'openThresh', v => (+v).toFixed(2), parseFloat],
+  ['s_grav',   'v_grav',   'gravity', v => v, parseInt],
+  ['s_rim',    'v_rim',    'rimHalf', v => (+v).toFixed(3), parseFloat],
+  ['s_launch', 'v_launch', 'launchSpeed', v => v, parseInt],
+  ['s_magnet', 'v_magnet', 'magnet', v => (+v).toFixed(1), parseFloat],
+];
+for (const [sid, vid, key, fmt, parse] of dbgMap) {
+  const s = document.getElementById(sid), v = document.getElementById(vid);
+  s.value = CFG[key];
+  v.textContent = fmt(CFG[key]);
+  s.addEventListener('input', () => {
+    CFG[key] = parse(s.value);
+    v.textContent = fmt(s.value);
+    if (key === 'playTime' && state !== STATE.PLAY) timeLeft = CFG.playTime;
+  });
+}
+document.getElementById('dbgLm').addEventListener('click', () => CFG.showLandmarks = !CFG.showLandmarks);
+document.getElementById('dbgMode').addEventListener('click', () => {
+  CFG.mode = CFG.mode === 'B' ? 'A' : 'B';
+  document.getElementById('dbgMode').textContent =
+    CFG.mode === 'B' ? '反射: B トランポリン' : '反射: A ミラー';
+});
+document.getElementById('dbgMove').addEventListener('click', () => {
+  CFG.movingBasket = !CFG.movingBasket;
+  document.getElementById('dbgMove').textContent = CFG.movingBasket ? 'カゴ移動: オン' : 'カゴ移動: オフ';
+  if (!CFG.movingBasket) { basketTargetX = W/2; }
+});
+document.getElementById('dbgMove').textContent = CFG.movingBasket ? 'カゴ移動: オン' : 'カゴ移動: オフ';
+document.getElementById('dbgWin').addEventListener('click', () => { score = CFG.target; setState(STATE.RESULT); });
+document.getElementById('dbgLose').addEventListener('click', () => { score = Math.max(0, CFG.target-2); setState(STATE.RESULT); });
+document.getElementById('dbgReset').addEventListener('click', () => setState(STATE.TITLE));
+document.getElementById('dbgClose').addEventListener('click', () => document.getElementById('debug').classList.remove('show'));
+function updateDbgStat() {
+  const el = document.getElementById('dbgStat');
+  if (document.getElementById('debug').classList.contains('show'))
+    el.textContent = `fps: ${fpsView} / infer: ${lastInferMs.toFixed(1)}ms / 柿ピー: ${pieces.length} / 粒: ${particles.length}`;
+}
+
+/* ============================================================
+   12. 起動シーケンス
+============================================================ */
+const bootMsg = document.getElementById('bootMsg');
+const bootSub = document.getElementById('bootSub');
+const bootSpin = document.getElementById('bootSpin');
+const btnBoot = document.getElementById('btnBoot');
+const ovBoot = document.getElementById('ovBoot');
+
+async function boot() {
+  buildSprites();
+  resize();
+  requestAnimationFrame(loop);
+  // 安全網：5秒たっても起動が終わらなければタッチ体験ボタンを出す
+  const safety = setTimeout(() => {
+    if (!previewMode && btnBoot.style.display !== 'block') {
+      bootSub.textContent = 'よみこみに時間がかかってるみたい。まってもいいし、下のボタンでカメラなしでもあそべるよ';
+      document.getElementById('btnPreview').style.display = 'block';
+    }
+  }, 5000);
+  try {
+    bootMsg.textContent = 'カメラを じゅんびちゅう…';
+    await setupCamera();
+    bootMsg.textContent = '顔認識を よみこみちゅう…';
+    await setupFaceDet();
+    clearTimeout(safety);
+    try { await document.fonts.load('80px "Reggae One"'); } catch (e) {}
+    bootMsg.textContent = 'じゅんびOK！';
+    bootSub.textContent = '';
+    bootSpin.style.display = 'none';
+    btnBoot.style.display = 'block';
+    document.getElementById('btnPreview').style.display = 'none';
+  } catch (err) {
+    clearTimeout(safety);
+    bootSpin.style.display = 'none';
+    document.getElementById('bootTitle').style.fontSize = '22px';
+    bootMsg.textContent = 'カメラが つかえないみたい。タッチ操作なら あそべるよ！';
+    const emsg = err && err.message ? String(err.message).slice(0, 90) : '';
+    bootSub.innerHTML = 'カメラで あそぶときの チェック：カメラを「許可」したか／https:// でひらいているか／ほかのアプリが カメラを つかっていないか' +
+      (emsg ? '<br><span style="opacity:.6">(' + emsg + ')</span>' : '');
+    bootSub.style.fontSize = '11px';
+    document.getElementById('btnPreview').style.display = 'block';
+  }
+}
+btnBoot.addEventListener('click', () => {
+  initAudio();
+  ovBoot.classList.add('hidden');
+  setState(STATE.TITLE);
+});
+window.addEventListener('error', ev => {
+  if (state === STATE.BOOT && !previewMode) {
+    bootSpin.style.display = 'none';
+    bootMsg.textContent = 'エラーが おきたみたい…';
+    bootSub.textContent = (ev && ev.message) ? ev.message : '';
+    document.getElementById('btnPreview').style.display = 'block';
+  }
+});
+boot();
+
+// --- PWA: Service Worker 登録（オフライン動作／CDN資産キャッシュ） ---
+// file:// やSW非対応環境では黙ってスキップ。ゲーム動作には影響しない。
+if ('serviceWorker' in navigator && location.protocol === 'https:') {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  });
+}
+</script>
+</body>
+</html>
