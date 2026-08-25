@@ -15,18 +15,21 @@
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
 <!--
   ============================================================
-  ふたりで協力！柿ピー玉入れ（顔＋頭上バー / PWA版 v7）
+  ふたりで協力！柿ピー玉入れ（顔＋頭上バー＋口パク吸い込み / PWA版 v9）
   ============================================================
   ・iPad 第9世代 / iPadOS 18 / Safari(またはブラウザラッパー) 向け
   ・横向き・1〜2人プレイ・カメラ(前面)必須・HTTPS必須
-  ・検出：顔(BlazeFace short-range)のみ。各プレイヤーの頭上に傾く跳ね返しバー。
+  ・検出：FaceLandmarker（顔メッシュ）。頭上バーで跳ね返し＋首の傾きで狙う。
+    口を大きく開けると近くの柿ピーを吸い込み、閉じると真上へドーン！と放出（得点化）。
+    ※ v7まではBlazeFace(軽量)。口の開閉を取るためv8でFaceLandmarkerに変更＝やや重い。
+      iPadでfpsが厳しければ、口パク無しの軽量版 v7.3 に戻せる。
     顔映像は端末内で切り抜いて描画するだけ。外部へは一切送信しない。
   ・PWA構成（同じフォルダに置いてHTTPSで配信）:
-      kakipi-tamaire-v7.html / manifest.webmanifest / sw.js / icon-192.png / icon-512.png / icon-180.png
+      kakipi-tamaire-v9.html / manifest.webmanifest / sw.js / icon-192.png / icon-512.png / icon-180.png
     初回オンラインで一度読み込むと、Service Workerが下記CDN資産をキャッシュ→以降オフライン動作可。
   ・外部通信（配布前チェック用リスト・初回のみ / 以降キャッシュ）:
       1) cdn.jsdelivr.net        … MediaPipe Tasks Vision (JS + wasm)
-      2) storage.googleapis.com  … blaze_face_short_range.tflite モデル
+      2) storage.googleapis.com  … face_landmarker.task モデル
       3) fonts.googleapis.com / fonts.gstatic.com … Reggae One / M PLUS Rounded 1c
     上記以外への送信ゼロ。カメラ映像・顔画像の保存/送信も一切なし。スコア記録もなし。
   ・デバッグパネル: 画面左上すみを すばやく3回タップ
@@ -63,7 +66,7 @@
   /* ---------- debug panel ---------- */
   #debug { position:fixed; top:8px; right:8px; z-index:80; width:300px; max-height:92vh; overflow-y:auto;
     background:rgba(10,8,30,.94); border:1px solid #4a3f8f; border-radius:12px; padding:12px 14px; color:#dcd6ff;
-    font-size:12px; display:none; -webkit-user-select:auto; touch-action:pan-y; }
+    font-size:12px; display:none; -webkit-user-select:auto; user-select:auto; touch-action:pan-y; }
   #debug.show { display:block; }
   #debug h3 { font-size:13px; color:#ffe63b; margin-bottom:8px; letter-spacing:.06em; }
   #debug .row { margin-bottom:10px; }
@@ -114,7 +117,8 @@
   <div class="row"><label>落下間隔(ms) <span id="v_spawn"></span></label><input type="range" id="s_spawn" min="200" max="2000" step="50"></div>
   <div class="row"><label>同時上限 <span id="v_max"></span></label><input type="range" id="s_max" min="5" max="30" step="1"></div>
   <div class="row"><label>ビーム反発 <span id="v_power"></span></label><input type="range" id="s_power" min="0.5" max="2.5" step="0.05"></div>
-  <div class="row"><label>パー判定しきい値 <span id="v_open"></span></label><input type="range" id="s_open" min="1.0" max="1.6" step="0.02"></div>
+  <div class="row"><label>顔サイズ <span id="v_open"></span></label><input type="range" id="s_open" min="0.3" max="0.9" step="0.02"></div>
+  <div class="row"><label>口の開き感度 <span id="v_conf"></span></label><input type="range" id="s_conf" min="0.15" max="0.55" step="0.01"></div>
   <div class="row"><label>重力 <span id="v_grav"></span></label><input type="range" id="s_grav" min="600" max="2200" step="50"></div>
   <div class="row"><label>カゴの広さ <span id="v_rim"></span></label><input type="range" id="s_rim" min="0.07" max="0.16" step="0.005"></div>
   <div class="row"><label>発射スピード(B) <span id="v_launch"></span></label><input type="range" id="s_launch" min="600" max="1600" step="25"></div>
@@ -122,6 +126,7 @@
   <div class="row">
     <button class="dbtn" id="dbgMode">反射: B トランポリン</button>
     <button class="dbtn" id="dbgMove">カゴ移動: オフ</button>
+    <button class="dbtn" id="dbgMouth">口パク: オン</button>
   </div>
   <div class="row">
     <button class="dbtn" id="dbgLm">ランドマーク表示</button>
@@ -143,11 +148,12 @@ const CFG = {   // ★2026-07 実機調整値をデフォルト化
   playTime: 50,        // 制限時間
   spawnInterval: 400,  // 落下間隔ms
   maxPieces: 25,       // 同時上限
-  beamPower: 1.5,      // ビーム反発
-  openThresh: 1.22,    // パー判定（指先/手サイズ比）
-  closeThresh: 0.92,   // グー判定
+  beamPower: 1.5,      // バー反発
+  faceView: 0.4,       // 顔カーソルの表示スケール（小さいほど画面が広く感じる／バーの大きさには影響しない）
+  mouthOpen: 0.28,     // 口が開いたと判定するMAR（大きいほど鈍感）。低いと発動しやすい
+  mouthFx: true,       // 口パク吸い込み演出のON/OFF
   gravity: 1350,
-  rimHalf: 0.130,      // カゴ開口半径（画面幅比）
+  rimHalf: 0.105,      // カゴ開口半径（画面幅比）
   chargeTime: 1.35,    // 最大チャージ秒
   showLandmarks: false,
   bpm: 122,
@@ -263,7 +269,14 @@ function buildSprites() {
     gr.addColorStop(1,'rgba(120,180,255,0)');
     g.fillStyle = gr; g.fillRect(-32,-32,64,64);
   });
-  // 電飾のぼんぼり
+  // 跳ね返した「生きてる球」用の金グロー
+  SPR.hot = makeSprite(64, (g,s) => {
+    const gr = g.createRadialGradient(0,0,0, 0,0,30);
+    gr.addColorStop(0,'rgba(255,255,235,1)');
+    gr.addColorStop(0.4,'rgba(255,210,90,.7)');
+    gr.addColorStop(1,'rgba(255,150,30,0)');
+    g.fillStyle = gr; g.fillRect(-32,-32,64,64);
+  });
   SPR.bokeh = makeSprite(48, (g,s) => {
     const gr = g.createRadialGradient(0,0,0, 0,0,22);
     gr.addColorStop(0,'rgba(255,240,180,1)');
@@ -399,6 +412,7 @@ const SND = {
   playing: false, nextBeatT: 0, beat16: 0, bpm: CFG.bpm,
   combo: 0, comboT: 0,
   charge: null,
+  suck: null, sucking: false,   // 吸い込み持続音（ごぉ～）
 };
 const PENTA = [220, 261.63, 293.66, 329.63, 392, 440, 523.25, 587.33, 659.25, 783.99, 880];
 
@@ -597,10 +611,10 @@ setInterval(schedulerTick, 25);
      スクリプト全体が止まらず、タッチ体験モードに逃げられるようにする
 ============================================================ */
 const MEDIAPIPE_URL = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14';
-const FACE_MODEL_URL = 'https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite';
+const FACE_MODEL_URL = 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task';
 const FACE_CROP = 1.35;  // boundingBoxを縦横このぶん拡張して切り抜く（顎・口が切れるのを防ぐ）
-const FACE_VIEW = 0.7;   // 画面上の顔カーソルの表示スケール（0.7=約70%に縮小）
-const BAR_LEN   = 1.9;   // 頭上バーの半長（顔半径比）
+// 顔カーソルの表示スケールは CFG.faceView（デバッグパネルで調整可）
+const BAR_LEN   = 0.95;  // 頭上バーの半長（顔半径比）※v9で半分に
 const BAR_GAP   = 1.25;  // バーを顔中心からどれだけ上に置くか（顔半径比）
 const BAR_TILT  = 0.8;   // 首の傾き→バー傾きの最大角(rad, 約46°)
 
@@ -620,6 +634,11 @@ function newHand(id) {
     faceSrc: null, faceR: 60,                  // 顔モード：切り抜き元(video px) と 画面上の半径
     faceRS: 60,                                // 半径のスムージング値（ちらつき防止）
     roll: 0, rollS: 0,                         // 首の傾き（生/スムージング）→頭上バーの傾き
+    mar: 0, marS: 0,                           // 口の開き（生/スムージング）
+    mouth: { x: 0, y: 0 }, mouthT: { x: 0, y: 0 },  // 口の中心（平滑後/目標）＝吸い込み位置
+    mouthOpen: false, mouthHold: 0,            // 口の開閉ヒステリシス状態／開いてる時間
+    captured: [],                              // 吸い込んだ柿ピー（kindの配列）
+    blastCd: 0,                                // 放出後のクールダウン（連発防止）
     bar: { active:false, ax:0, ay:0, bx:0, by:0, power:1 },  // 頭上の跳ね返しバー
     color: id === 0 ? '#57e8ff' : '#ff7ad9',
     colorDim: id === 0 ? 'rgba(87,232,255,' : 'rgba(255,122,217,',
@@ -649,11 +668,13 @@ async function loadVision() {
 async function setupFaceDet() {
   if (faceDet) return;
   const mod = await loadVision();
-  const make = del => mod.FaceDetector.createFromOptions(visionFileset, {
+  const make = del => mod.FaceLandmarker.createFromOptions(visionFileset, {
     baseOptions: { modelAssetPath: FACE_MODEL_URL, delegate: del },
     runningMode: 'VIDEO',
-    // 顔＝距離で通行人をはじきやすい。少し甘めから。
-    minDetectionConfidence: 0.3, minSuppressionThreshold: 0.3
+    numFaces: 2,
+    outputFaceBlendshapes: false,     // 口の開きはランドマークから自前で算出（軽く保つ）
+    // 椅子や物は顔メッシュが当たらず弾かれる。距離での弱い検出も除去。
+    minFaceDetectionConfidence: 0.5, minFacePresenceConfidence: 0.5, minTrackingConfidence: 0.5
   });
   try { faceDet = await make('GPU'); }
   catch (e) { faceDet = await make('CPU'); }
@@ -679,7 +700,11 @@ function runInference(now) {
   inferBusy = false;
 }
 
-// --- 顔：FaceDetector → boundingBox中心をカーソルに。切り抜き元(video px)＋首の傾きも持たせる ---
+// --- 顔：FaceLandmarker → メッシュから bbox中心・首の傾き・口の開き(MAR) を算出 ---
+// よく使うランドマーク番号（MediaPipe 468点）
+const LM_EYE_R = 33, LM_EYE_L = 263;       // 目尻（外側）— 傾き用
+const LM_LIP_UP = 13, LM_LIP_LO = 14;      // 口の内側 上/下 — 開き用
+const LM_MOUTH_R = 61, LM_MOUTH_L = 291;   // 口角 左右 — 口幅
 function runFaceInference(now) {
   const t0 = performance.now();
   detCtx.drawImage(video, 0, 0, 320, 240);
@@ -688,14 +713,32 @@ function runFaceInference(now) {
   lastInferMs = performance.now() - t0;
   if (!result) return;
   const vw = video.videoWidth || 640, vh = video.videoHeight || 480;
-  // boundingBox は detCanvas(320x240)ピクセル。keypoints は正規化[0,1]。
+  const faces = result.faceLandmarks || [];
   const raw = [];
-  for (const det of (result.detections || [])) {
-    const bb = det.boundingBox; if (!bb) continue;
-    const nw = bb.width / 320, nh = bb.height / 240;
-    const cxn = (bb.originX + bb.width / 2) / 320;
-    const cyn = (bb.originY + bb.height / 2) / 240;
-    raw.push({ cxn, cyn, nw, nh, area: nw * nh, kp: det.keypoints || null });
+  for (const lm of faces) {
+    if (!lm || lm.length < 300) continue;
+    // メッシュ全体の外接矩形（正規化[0,1]）
+    let minx = 1, miny = 1, maxx = 0, maxy = 0;
+    for (const p of lm) {
+      if (p.x < minx) minx = p.x; if (p.x > maxx) maxx = p.x;
+      if (p.y < miny) miny = p.y; if (p.y > maxy) maxy = p.y;
+    }
+    const nw = maxx - minx, nh = maxy - miny;
+    if (nh < 0.06) continue;                       // 小さすぎる（遠すぎ）は捨てる
+    const ratio = (nw * vw) / (nh * vh || 1);
+    if (ratio < 0.45 || ratio > 1.9) continue;     // 顔らしからぬ極端な形は捨てる
+    // 口の開き＝MAR（縦の唇間 ÷ 口幅）。px空間(320x240)で計算。
+    const px = i => ({ x: lm[i].x * 320, y: lm[i].y * 240 });
+    const gap = dist(px(LM_LIP_UP).x, px(LM_LIP_UP).y, px(LM_LIP_LO).x, px(LM_LIP_LO).y);
+    const wid = dist(px(LM_MOUTH_R).x, px(LM_MOUTH_R).y, px(LM_MOUTH_L).x, px(LM_MOUTH_L).y);
+    const mar = wid > 1 ? gap / wid : 0;
+    // 口の中心（正規化）— 吸い込み位置に使う
+    const mouthN = { x: (lm[LM_LIP_UP].x + lm[LM_LIP_LO].x) / 2, y: (lm[LM_LIP_UP].y + lm[LM_LIP_LO].y) / 2 };
+    raw.push({
+      cxn: (minx + maxx) / 2, cyn: (miny + maxy) / 2, nw, nh, area: nw * nh,
+      kp: [{ x: lm[LM_EYE_R].x, y: lm[LM_EYE_R].y }, { x: lm[LM_EYE_L].x, y: lm[LM_EYE_L].y }],
+      mar, mouthN
+    });
   }
   // 大きい顔＝近い人を優先し、上位2つだけ採用（通行人・遠くの人を弾く）
   raw.sort((a, b) => b.area - a.area);
@@ -708,21 +751,19 @@ function runFaceInference(now) {
     const bot = mapPoint({ x: f.cxn, y: f.cyn + f.nh / 2 });
     const wScr = dist(lft.x, lft.y, rgt.x, rgt.y);
     const hScr = dist(top.x, top.y, bot.x, bot.y);
-    // 表示半径（FACE_VIEWで縮小）。切り抜きの余白はFACE_CROPで確保。
-    const R = clamp(Math.max(wScr, hScr) * FACE_CROP * FACE_VIEW * 0.5, 30, H * 0.30);
-    // 切り抜きは video px の正方形（円クリップに歪みなく収める）
+    // 表示半径（CFG.faceViewで縮小）。切り抜きの余白はFACE_CROPで確保。
+    const R = clamp(Math.max(wScr, hScr) * FACE_CROP * CFG.faceView * 0.5, 28, H * 0.24);
     const sidePx = Math.max(f.nw * vw, f.nh * vh) * FACE_CROP;
     const src = { sx: f.cxn * vw - sidePx / 2, sy: f.cyn * vh - sidePx / 2, side: sidePx };
-    // 首の傾き：両目キーポイント(0,1)の角度。ミラー空間で計算＝見た目の顔と一致。
+    // 首の傾き：両目尻の角度。ミラー空間で計算＝見た目の顔と一致。
     let roll = 0;
-    if (f.kp && f.kp.length >= 2) {
-      const e0 = mapPoint(f.kp[0]), e1 = mapPoint(f.kp[1]);
-      let ang = Math.atan2(e1.y - e0.y, e1.x - e0.x);
-      if (ang >  Math.PI / 2) ang -= Math.PI;   // 目の左右順に依らず[-90,90]へ畳む
-      if (ang < -Math.PI / 2) ang += Math.PI;
-      roll = clamp(ang, -BAR_TILT, BAR_TILT);
-    }
-    dets.push({ palm: center, size: R, isFace: true, faceR: R, faceSrc: src, roll });
+    const e0 = mapPoint(f.kp[0]), e1 = mapPoint(f.kp[1]);
+    let ang = Math.atan2(e1.y - e0.y, e1.x - e0.x);
+    if (ang >  Math.PI / 2) ang -= Math.PI;
+    if (ang < -Math.PI / 2) ang += Math.PI;
+    roll = clamp(ang, -BAR_TILT, BAR_TILT);
+    dets.push({ palm: center, size: R, isFace: true, faceR: R, faceSrc: src, roll,
+                mar: f.mar, mouth: mapPoint(f.mouthN) });
   }
   assignDets(dets, performance.now() / 1000);
 }
@@ -768,18 +809,13 @@ function applyDet(h, d, nowS) {
     h.faceSrc = d.faceSrc; h.faceR = d.faceR;
     if (first) h.faceRS = d.faceR;
     if (typeof d.roll === 'number') { h.roll = d.roll; if (first) h.rollS = d.roll; }
+    if (typeof d.mar === 'number') { h.mar = d.mar; if (first) h.marS = d.mar; }
+    if (d.mouth) { h.mouthT = d.mouth; if (first) { h.mouth.x = d.mouth.x; h.mouth.y = d.mouth.y; } }
     h.open = true; h.openness = 1.5;
     h.palm = d.palm; h.size = d.size;
     if (first) { h.palmS.x = d.palm.x; h.palmS.y = d.palm.y; }
     return;
   }
-  h.faceSrc = null;
-  h.pts = d.pts; h.size = d.size; h.openness = d.openness;
-  h.palm = d.palm;
-  if (first) { h.palmS.x = d.palm.x; h.palmS.y = d.palm.y; }
-  // パー/グー ヒステリシス
-  if (!h.open && d.openness > CFG.openThresh) h.open = true;
-  else if (h.open && d.openness < CFG.closeThresh) h.open = false;
 }
 function smoothHands(dt) {
   const k = 1 - Math.pow(0.0001, dt);   // フレームレート非依存の追従
@@ -790,6 +826,9 @@ function smoothHands(dt) {
     h.palmS.y = lerp(h.palmS.y, h.palm.y, k);
     h.faceRS = lerp(h.faceRS, h.faceR, kr);
     h.rollS = lerp(h.rollS, h.roll, ka);
+    h.marS = lerp(h.marS, h.mar, 1 - Math.pow(0.02, dt));  // 口の開きは中庸の追従
+    h.mouth.x = lerp(h.mouth.x, h.mouthT.x, k);
+    h.mouth.y = lerp(h.mouth.y, h.mouthT.y, k);
   }
 }
 
@@ -885,10 +924,10 @@ function spawnPiece(kind) {
     x, y: -r*2,
     vx: rnd(-40, 40), vy: rnd(0, 60),
     rot: rnd(0, TAU), vrot: rnd(-3, 3),
-    r, hitCd: 0, scored: false
+    r, hitCd: 0, scored: false, bounced: false
   });
 }
-function rimY() { return H * 0.175; }
+function rimY() { return H * 0.24; }
 function rimHalf() { return W * CFG.rimHalf; }
 
 function updatePieces(dt) {
@@ -912,9 +951,9 @@ function updatePieces(dt) {
         if (h.bar.active && collideBar(p, h.bar)) break;
       }
     }
-    // カゴふちの吸い込み救済（惜しい球をそっと中央へ）
-    if (CFG.magnet > 0 && p.y < ry + H*0.1 && p.y > ry - H*0.16 &&
-        Math.abs(p.x - cx) < rh * 1.7) {
+    // カゴふちの吸い込み救済：跳ね返した「生きてる球」だけそっと中央へ寄せる
+    if (CFG.magnet > 0 && p.bounced && p.y < ry + H*0.1 && p.y > ry - H*0.16 &&
+        Math.abs(p.x - cx) < rh * 1.9) {
       p.vx += (cx - p.x) * CFG.magnet * dt;
     }
     // カゴのふち：上から開口部へ落ちてくる球は角に当たっても弾かない（甘め判定）
@@ -935,8 +974,8 @@ function updatePieces(dt) {
         }
       }
     }
-    // ゴール判定：上から開口部を通って落ちてきた
-    if (state === STATE.PLAY && !p.scored &&
+    // ゴール判定：一度バーで跳ね返した球が、上から開口部を通って落ちてきた
+    if (state === STATE.PLAY && !p.scored && p.bounced &&
         prevY < ry && p.y >= ry && p.vy > 0 &&
         p.x > cx - rh + p.r*0.4 && p.x < cx + rh - p.r*0.4) {
       p.scored = true;
@@ -987,7 +1026,9 @@ function collideBar(p, bar) {
   const pushOut = p.r + barR + 1;
   p.x = qx + nx * pushOut; p.y = qy + ny * pushOut;
   p.hitCd = 0.13;
-  burst(qx, qy, 6, 260, { grav: 300 });
+  const firstHit = !p.bounced;
+  p.bounced = true;                       // これで初めて「得点できる球」になる
+  burst(qx, qy, firstHit ? 12 : 6, firstHit ? 340 : 260, { grav: 300 });
   if (state === STATE.PLAY) { sHitCombo(); comboView = SND.combo; }
   return true;
 }
@@ -1005,14 +1046,123 @@ function onGoal(p) {
   }
 }
 
+// 口パク：大きく開ける→顔まわりの円(リング)に柿ピーが張り付く(ごぉ～)→閉じると真上へドーン！
+const MOUTH_R    = 0.34;   // 引き寄せ範囲（画面高さ比）— 広めに取って発動しやすく
+const MOUTH_HOLD = 0.10;   // 開いてこの秒だけ待って吸い始める（一瞬の口では誤爆しない）
+const MOUTH_CAP  = 10;     // 円に張り付く最大数
+function ringR(h) { return Math.max(20, h.faceRS) * 1.7; }   // drawFaceの吸引リングと同じ半径
+function updateMouths(dt) {
+  // 持続音（ごぉ～）：誰か1人でも吸い込み中なら鳴らす
+  let anySucking = false;
+  if (CFG.mouthFx) {
+    const openTh = CFG.mouthOpen, closeTh = openTh * 0.6;
+    for (const h of hands) {
+      h.blastCd = Math.max(0, h.blastCd - dt);
+      if (!h.present) { h.mouthOpen = false; h.mouthHold = 0; h.captured.length = 0; continue; }
+      const cx = h.palmS.x, cy = h.palmS.y, rr = ringR(h);
+      // 開閉（ヒステリシス＋クールダウン）
+      if (!h.mouthOpen) {
+        if (h.marS > openTh && h.blastCd <= 0) { h.mouthOpen = true; h.mouthHold = 0; }
+      } else if (h.marS < closeTh) {
+        if (state === STATE.PLAY) blastMouth(h);
+        h.mouthOpen = false; h.mouthHold = 0; h.captured.length = 0;
+        continue;
+      }
+      if (h.mouthOpen && state === STATE.PLAY) {
+        h.mouthHold += dt;
+        if (h.mouthHold > MOUTH_HOLD) {
+          anySucking = true;
+          // 近くの柿ピーを「円のいちばん近い点」へ引き寄せ、着いたら張り付かせる
+          for (let i = pieces.length - 1; i >= 0; i--) {
+            const p = pieces[i];
+            const d = dist(p.x, p.y, cx, cy);
+            if (d > H * MOUTH_R) continue;
+            const ang = Math.atan2(p.y - cy, p.x - cx);
+            const tx = cx + Math.cos(ang) * rr, ty = cy + Math.sin(ang) * rr;  // 円上の目標点
+            const dt2 = dist(p.x, p.y, tx, ty);
+            const inv = 1 / (dt2 || 1);
+            const pull = 3200;
+            p.vx += (tx - p.x) * inv * pull * dt;
+            p.vy += (ty - p.y) * inv * pull * dt;
+            if (dt2 < Math.max(h.faceRS * 0.5, H * 0.035) && h.captured.length < MOUTH_CAP) {
+              h.captured.push({ kind: p.kind, ang });      // 円に張り付き
+              pieces.splice(i, 1);
+              burst(tx, ty, 5, 180, { grav: 120 });
+            }
+          }
+        }
+      }
+    }
+  }
+  // ごぉ～SEの開始/停止
+  if (anySucking && !SND.sucking) { sSuckStart(); SND.sucking = true; }
+  else if (!anySucking && SND.sucking) { sSuckEnd(); SND.sucking = false; }
+}
+function blastMouth(h) {
+  const n = h.captured.length, cx = h.palmS.x, cy = h.palmS.y, rr = ringR(h);
+  h.blastCd = 0.55;                                   // 連発防止
+  if (n === 0) { return; }
+  // ドーン！円に張り付いた柿ピーを真上へ吹き飛ばす（bounced=true＝得点になる）
+  for (const c of h.captured) {
+    const x = cx + Math.cos(c.ang) * rr, y = cy + Math.sin(c.ang) * rr;
+    const sp = CFG.launchSpeed * rnd(1.3, 1.6);
+    pieces.push({
+      kind: c.kind, x, y,
+      vx: rnd(-70, 70),                                // ほぼ真上（横成分は小さく）
+      vy: -sp,
+      rot: rnd(0, TAU), vrot: rnd(-10, 10),
+      r: pieceRadius(), hitCd: 0.25, scored: false, bounced: true
+    });
+  }
+  h.captured.length = 0;
+  flashA = Math.max(flashA, 0.7);
+  shocks.push({ x: cx, y: cy, r: rr * 0.6, age: 0, life: 0.6 });
+  burst(cx, cy - rr * 0.5, 24 + n * 4, 700, { grav: 300 });
+  sBlast(n);
+}
+// ごぉ～（吸い込みの持続音）
+function sSuckStart() {
+  if (!SND.ac || SND.suck) return;
+  const ac = SND.ac, t = ac.currentTime;
+  const src = ac.createBufferSource(); src.buffer = SND.noiseBuf; src.loop = true;
+  const f = ac.createBiquadFilter(); f.type = 'bandpass'; f.Q.value = 1.2; f.frequency.value = 520;
+  const g = ac.createGain(); g.gain.value = 0;
+  g.gain.linearRampToValueAtTime(0.14, t + 0.12);
+  const lfo = ac.createOscillator(); lfo.type = 'sine'; lfo.frequency.value = 7;
+  const lg = ac.createGain(); lg.gain.value = 180;
+  lfo.connect(lg); lg.connect(f.frequency);
+  src.connect(f); f.connect(g); g.connect(SND.master);
+  src.start(t); lfo.start(t);
+  SND.suck = { src, g, lfo };
+}
+function sSuckEnd() {
+  const s = SND.suck; if (!s) return;
+  SND.suck = null;
+  const t = SND.ac.currentTime;
+  s.g.gain.linearRampToValueAtTime(0, t + 0.06);
+  s.src.stop(t + 0.12); s.lfo.stop(t + 0.12);
+}
+function sBlast(n) {
+  if (!SND.ac) return;
+  const t = SND.ac.currentTime;
+  // ドーン！（下降＋低音の一撃）
+  osc('sawtooth', 300, t, 0.5, 0.5, 0.46, 48);
+  osc('sine', 80, t, 0.5, 0.9, 0.46, 34);
+  noiseHit(t, 0.3, 0.55, 'lowpass', 1500);
+  for (let i = 0; i < Math.min(n, 6); i++)            // 打ち上げのきらめき
+    osc('triangle', PENTA[3 + i], t + 0.05 + i*0.035, 0.18, 0.16, 0.15);
+}
+
+
 // 各プレイヤーの頭上に、首の傾きで傾く跳ね返しバーを作る（1人でも2人でも同じ）
 function updateBars() {
   for (const h of hands) {
     if (!h.present) { h.bar.active = false; continue; }
-    const R = Math.max(30, h.faceRS);
+    const Rv = Math.max(20, h.faceRS);                     // 見た目の顔半径（faceViewで縮小）
+    const Rbar = Rv / Math.max(0.25, CFG.faceView);        // バーは縮小前サイズ基準＝顔を小さくしても縮まない
     const cx = h.palmS.x;
-    const cy = h.palmS.y - R * BAR_GAP;      // 頭上
-    const half = R * BAR_LEN;
+    const cy = h.palmS.y - Rv * BAR_GAP;                   // 小さい顔のすぐ上に置く
+    const half = Rbar * BAR_LEN;
     const a = h.rollS || 0;
     const dx = Math.cos(a) * half, dy = Math.sin(a) * half;
     h.bar.ax = cx - dx; h.bar.ay = cy - dy;
@@ -1110,8 +1260,16 @@ function drawPieces() {
   for (const p of pieces) {
     const spr = p.kind === 'kaki' ? SPR.kaki : SPR.peanut;
     const s = p.r * 2.4;
+    if (p.bounced) {
+      // 跳ね返した球は金色に光る（＝自分が打った球／これが入ると得点）
+      ctx.globalCompositeOperation = 'lighter';
+      const gs = s * 2.0 + Math.sin(p.rot*3) * 2;
+      ctx.drawImage(SPR.hot, p.x - gs/2, p.y - gs/2, gs, gs);
+      ctx.globalCompositeOperation = 'source-over';
+    }
     ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.rot);
-    ctx.drawImage(spr, -s/2, -s/2, s, s); ctx.restore();
+    const ss = p.bounced ? s * 1.08 : s;
+    ctx.drawImage(spr, -ss/2, -ss/2, ss, ss); ctx.restore();
   }
 }
 function jitteredLine(ax, ay, bx, by, mag, segs, seed) {
@@ -1240,6 +1398,20 @@ function drawFace(h, t) {
   ctx.beginPath(); ctx.arc(cx, cy, R * 1.28, 0, TAU); ctx.fill();
   ctx.restore();
 
+  // 口を開けて吸い込み中：金色のパルスリング＋内向きの光
+  if (CFG.mouthFx && h.mouthOpen) {
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    const pr = R * (1.7 + Math.sin(t * 12) * 0.12);
+    ctx.strokeStyle = 'rgba(255,205,90,0.85)';
+    ctx.lineWidth = Math.max(3, R * 0.09);
+    ctx.setLineDash([R * 0.5, R * 0.35]);
+    ctx.lineDashOffset = -t * 120;
+    ctx.beginPath(); ctx.arc(cx, cy, pr, 0, TAU); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.restore();
+  }
+
   const hasVid = h.faceSrc && video.readyState >= 2 && video.videoWidth > 0;
   if (hasVid) {
     const vw = video.videoWidth, vh = video.videoHeight;
@@ -1286,6 +1458,23 @@ function drawFace(h, t) {
   ctx.font = `800 ${Math.round(lw * 1.05)}px "M PLUS Rounded 1c", sans-serif`;
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.fillText(h.id === 0 ? '①' : '②', bx, by + 1);
+
+  // 円に張り付いた柿ピー（口を開けて吸い込み中）
+  if (CFG.mouthFx && h.captured.length > 0) {
+    const rr = R * 1.7;
+    ctx.save();
+    for (const c of h.captured) {
+      const px = cx + Math.cos(c.ang) * rr, py = cy + Math.sin(c.ang) * rr;
+      const spr = c.kind === 'kaki' ? SPR.kaki : SPR.peanut;
+      const ps = pieceRadius() * 2.2;
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.drawImage(SPR.hot, px - ps*0.7, py - ps*0.7, ps*1.4, ps*1.4);
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.save(); ctx.translate(px, py); ctx.rotate(c.ang + Math.sin(t*6)*0.15);
+      ctx.drawImage(spr, -ps/2, -ps/2, ps, ps); ctx.restore();
+    }
+    ctx.restore();
+  }
 
   if (CFG.showLandmarks) {
     ctx.strokeStyle = '#ffe63b'; ctx.lineWidth = 1;
@@ -1364,8 +1553,9 @@ function drawTitle(t) {
   }
   if (!previewMode)
     banner(`みつけた顔 ${n}人`, W/2, H*0.72, H*0.035, '#dcd6ff', '#3a2f80');
-  banner('あたまを かたむけて はねかえす角度を ねらえ！', W/2, H*0.85, H*0.036, '#ffe63b', '#6b3800');
-  banner('頭の上のバーで 柿ピーを カゴに いれよう！', W/2, H*0.92, H*0.033, '#ff9df0', '#701a5e');
+  banner('頭の上のバーで 柿ピーを 打ち上げろ！かたむけて 角度を ねらえ！', W/2, H*0.83, H*0.032, '#ffe63b', '#6b3800');
+  banner('大きく口を あけて 吸い込み → 閉じて 真上へ ドーン！', W/2, H*0.895, H*0.032, '#8dffea', '#04524a');
+  banner('✨光った柿ピーが カゴに入ると 得点！✨', W/2, H*0.95, H*0.03, '#ff9df0', '#701a5e');
 }
 function drawCountdown() {
   const n = 3 - Math.floor(stateT);
@@ -1443,6 +1633,7 @@ function loop(now) {
   else runInference(now);
   smoothHands(dt);
   updateBars();
+  updateMouths(dt);
   SND.comboT -= dt;
   if (SND.comboT <= 0) SND.combo = 0;
 
@@ -1572,7 +1763,8 @@ const dbgMap = [
   ['s_spawn',  'v_spawn',  'spawnInterval', v => v + 'ms', parseInt],
   ['s_max',    'v_max',    'maxPieces', v => v + 'こ', parseInt],
   ['s_power',  'v_power',  'beamPower', v => (+v).toFixed(2), parseFloat],
-  ['s_open',   'v_open',   'openThresh', v => (+v).toFixed(2), parseFloat],
+  ['s_open',   'v_open',   'faceView', v => (+v).toFixed(2), parseFloat],
+  ['s_conf',   'v_conf',   'mouthOpen', v => (+v).toFixed(2), parseFloat],
   ['s_grav',   'v_grav',   'gravity', v => v, parseInt],
   ['s_rim',    'v_rim',    'rimHalf', v => (+v).toFixed(3), parseFloat],
   ['s_launch', 'v_launch', 'launchSpeed', v => v, parseInt],
@@ -1600,6 +1792,10 @@ document.getElementById('dbgMove').addEventListener('click', () => {
   if (!CFG.movingBasket) { basketTargetX = W/2; }
 });
 document.getElementById('dbgMove').textContent = CFG.movingBasket ? 'カゴ移動: オン' : 'カゴ移動: オフ';
+document.getElementById('dbgMouth').addEventListener('click', () => {
+  CFG.mouthFx = !CFG.mouthFx;
+  document.getElementById('dbgMouth').textContent = CFG.mouthFx ? '口パク: オン' : '口パク: オフ';
+});
 document.getElementById('dbgWin').addEventListener('click', () => { score = CFG.target; setState(STATE.RESULT); });
 document.getElementById('dbgLose').addEventListener('click', () => { score = Math.max(0, CFG.target-2); setState(STATE.RESULT); });
 document.getElementById('dbgReset').addEventListener('click', () => setState(STATE.TITLE));
@@ -1640,7 +1836,7 @@ async function boot() {
   try {
     bootMsg.textContent = 'カメラを じゅんびちゅう…';
     await setupCamera();
-    bootMsg.textContent = '顔認識を よみこみちゅう…';
+    bootMsg.textContent = '顔認識を よみこみちゅう…（すこし時間がかかります）';
     await setupFaceDet();
     clearTimeout(safety);
     try { await document.fonts.load('80px "Reggae One"'); } catch (e) {}
