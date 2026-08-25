@@ -231,6 +231,7 @@
     </div>
 
     <div class="stageBtns">
+      <button class="iconBtn" id="homeBtn" title="ゲーム一覧にもどる">🏠</button>
       <button class="iconBtn" id="sndBtn" title="サウンド">🔊</button>
       <button class="iconBtn" id="setBtn" title="せってい">⚙️</button>
       <button class="iconBtn" id="fsBtn" title="ぜんがめん">⛶</button>
@@ -249,6 +250,9 @@
 </div>
 
 <script type="module">
+import { mountHomeButton, requestCamera, cameraKnownGranted, showCameraHelp, cameraHelpLink }
+  from '../shared/minigames.js';
+
 const VISION_CDN = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14";
 const MODEL = "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task";
 const WASM  = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm";
@@ -826,7 +830,8 @@ function menuHTML(){
         ④ さきにゴールしたシャクトリムシの勝ち 🏁</p>
       </div>
       <p style="font-size:12px;color:#9b8a66">📱 スマホはよこ向きがおすすめ！</p>
-      <button class="btn" id="primaryBtn" style="margin-top:8px">🎥 カメラを開始</button>`;
+      <button class="btn" id="primaryBtn" style="margin-top:8px">${cameraKnownGranted()?'▶️ はじめる':'🎥 カメラを開始'}</button>
+      ${cameraKnownGranted()?'':'<div id="camHelpSlot"></div>'}`;
   }
   if(game.state==='ready'){
     const m = game.mode==='2p'
@@ -843,7 +848,10 @@ function loadingHTML(msg){ return `<h3>よみこみ中…</h3><p>${msg}</p>`; }
 function errorHTML(msg){
   return `<h3>あれ？</h3><p class="err">${msg}</p>
     <p style="font-size:13px">カメラの「許可」を確認し、最新のブラウザでお試しください。</p>
-    <button class="btn alt" id="retryBtn" style="margin-top:8px">もう一度ためす</button>`;
+    <div style="display:flex;gap:10px;justify-content:center;margin-top:8px;flex-wrap:wrap">
+      <button class="btn alt" id="retryBtn">もう一度ためす</button>
+      <button class="btn alt" id="camHelpBtn">📷 カメラのせってい</button>
+    </div>`;
 }
 function resultHTML(){
   const wp=game.players[game.winner];
@@ -858,6 +866,10 @@ function resultHTML(){
 }
 
 function bindModal(){
+  const ch=document.getElementById('camHelpBtn');
+  if(ch) ch.onclick=()=>{ SFX.click(); showCameraHelp(); };
+  const slot=document.getElementById('camHelpSlot');
+  if(slot) slot.appendChild(cameraHelpLink());
   const pb=document.getElementById('primaryBtn');
   if(pb) pb.onclick=()=>{ SFX.click(); game.state==='init' ? initSystem() : startCountdown(); };
   const rb=document.getElementById('retryBtn'); if(rb) rb.onclick=()=>{ SFX.click(); initSystem(); };
@@ -892,11 +904,14 @@ function bindModal(){
 async function initSystem(){
   showOverlay(loadingHTML('カメラとAIを準備しています…'));
   try{
-    const stream=await navigator.mediaDevices.getUserMedia({video:{width:640,height:480,facingMode:'user'}});
-    video.srcObject=stream; await video.play();
+    const stream=await requestCamera({video:{width:{ideal:640},height:{ideal:480},facingMode:'user'},audio:false});
+    if(video.srcObject!==stream) video.srcObject=stream;
+    await video.play();
     camHint.style.display='none';
   }catch(e){
-    showOverlay(errorHTML('カメラを開始できませんでした。'+ (e.message||''))); return;
+    showOverlay(errorHTML(e.denied
+      ? 'カメラの使用が許可されていません。'
+      : 'カメラを開始できませんでした。'+ (e.message||''))); return;
   }
   try{
     const { HandLandmarker, FilesetResolver } = await import(VISION_CDN);
@@ -1000,6 +1015,11 @@ document.getElementById('fsBtn').addEventListener('click',()=>{
 });
 
 pip.addEventListener('click',()=>{ SFX.click(); pip.classList.toggle('mini'); });
+
+mountHomeButton({
+  mount: document.getElementById('homeBtn'),
+  confirmWhile: () => game.state==='racing' || game.state==='countdown'
+});
 
 /* debug hook: window.__shakutori.step(1) simulates one hop (no camera needed) */
 window.__shakutori = { game, step:(pid=1)=>{ if(game.state==='racing'){ game.players[pid].steps++; onStep(pid); } } };
