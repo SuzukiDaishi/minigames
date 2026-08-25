@@ -1,10 +1,11 @@
 const CACHE_PREFIX = 'kakipi-tamaire-';
-const CACHE_NAME = `${CACHE_PREFIX}v7`;
+const CACHE_NAME = `${CACHE_PREFIX}v8`;
 
 const PRECACHE = [
   './',
   './index.html',
   './manifest.webmanifest',
+  '../shared/minigames.js',
   './icon-180.png',
   './icon-192.png',
   './icon-512.png',

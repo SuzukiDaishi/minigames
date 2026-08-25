@@ -87,6 +87,7 @@
     <button class="bigbtn hidden" id="btnBoot" style="display:none">はじめる</button>
     <button class="bigbtn" id="btnPreview" style="display:none; background:linear-gradient(180deg,#5a7cff,#2a3fd3); box-shadow:0 6px 0 #101a7c, 0 0 26px rgba(90,124,255,.55); font-size:clamp(16px,2.6vw,24px);">カメラなしで タッチ体験</button>
     <div class="ov-sub" id="bootSub">はじめてのときは「カメラを許可」を おしてね</div>
+    <button class="bigbtn" id="btnCamHelp" style="display:none; background:linear-gradient(180deg,#8f86c8,#4d449b); box-shadow:0 6px 0 #241d5c, 0 0 26px rgba(143,134,200,.45); font-size:clamp(14px,2.2vw,20px); padding:12px 34px;">📷 カメラのせってい</button>
   </div>
 </div>
 
@@ -132,6 +133,8 @@
 </div>
 
 <script type="module">
+import { mountHomeButton, requestCamera, showCameraHelp, cameraHelpLink } from '../shared/minigames.js';
+
 /* ============================================================
    0. 設定・状態
 ============================================================ */
@@ -626,14 +629,16 @@ function newHand(id) {
 const hands = [newHand(0), newHand(1)];
 
 async function setupCamera() {
-  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia)
-    throw new Error('この環境ではカメラAPIがつかえません');
-  const stream = await navigator.mediaDevices.getUserMedia({
+  // 許可は shared/minigames.js が一元管理（同じページで何度呼んでも聞かれるのは最初の1回だけ）
+  const stream = await requestCamera({
     video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
     audio: false
   });
-  video.srcObject = stream;
-  await new Promise(res => { video.onloadedmetadata = res; });
+  if (video.srcObject !== stream) {
+    video.srcObject = stream;
+    if (video.readyState < 1)
+      await new Promise(res => { video.onloadedmetadata = res; });
+  }
   await video.play();
 }
 async function loadVision() {
@@ -1612,7 +1617,14 @@ const bootMsg = document.getElementById('bootMsg');
 const bootSub = document.getElementById('bootSub');
 const bootSpin = document.getElementById('bootSpin');
 const btnBoot = document.getElementById('btnBoot');
+const btnCamHelp = document.getElementById('btnCamHelp');
 const ovBoot = document.getElementById('ovBoot');
+
+btnCamHelp.addEventListener('click', () => showCameraHelp());
+bootSub.insertAdjacentElement('afterend', cameraHelpLink());
+
+// 左上すみは デバッグ用の3回タップ判定があるので、戻るボタンは左下に置く
+mountHomeButton({ corner: 'bottom-left', quiet: true, confirmWhile: () => state === STATE.PLAY });
 
 async function boot() {
   buildSprites();
@@ -1646,6 +1658,7 @@ async function boot() {
     bootSub.innerHTML = 'カメラで あそぶときの チェック：カメラを「許可」したか／https:// でひらいているか／ほかのアプリが カメラを つかっていないか' +
       (emsg ? '<br><span style="opacity:.6">(' + emsg + ')</span>' : '');
     bootSub.style.fontSize = '11px';
+    btnCamHelp.style.display = 'block';
     document.getElementById('btnPreview').style.display = 'block';
   }
 }
@@ -1669,6 +1682,8 @@ boot();
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('sw.js').catch(() => {});
+    // ゲーム一覧（親ディレクトリ）もオフラインで開けるように
+    navigator.serviceWorker.register('../sw.js').catch(() => {});
   });
 }
 </script>

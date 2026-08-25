@@ -2,7 +2,7 @@
   "name": "ミニゲーム集",
   "short_name": "ミニゲーム",
   "description": "ブラウザであそべるミニゲーム集",
-  "id": "./",
+  "id": "minigames-home",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
