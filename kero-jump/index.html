@@ -25,22 +25,29 @@
     --ink:#20232b; --yellow:#ffd23f;
   }
   *{box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; user-select:none;}
-  html,body{height:100%; overflow:hidden; background:var(--ink); font-family:'M PLUS Rounded 1c',sans-serif;}
-  #app{position:fixed; inset:0; display:flex; align-items:center; justify-content:center; background:var(--ink);}
-  #stage{position:relative; width:100%; height:100%; max-width:1100px; max-height:720px; aspect-ratio:16/9;
-    background:#000; overflow:hidden; box-shadow:0 0 0 6px #10121a, 0 20px 60px rgba(0,0,0,.6);}
+  html,body{height:100%; overflow:hidden; background:#241241; font-family:'M PLUS Rounded 1c',sans-serif;}
+  #app{position:fixed; inset:0; display:flex; align-items:center; justify-content:center; background:#241241;}
+  #stage{position:relative; width:100%; max-width:1100px; max-height:720px; aspect-ratio:16/9;
+    background:#241241; overflow:hidden; box-shadow:0 0 0 6px #10121a, 0 20px 60px rgba(0,0,0,.6);}
   canvas#game{position:absolute; inset:0; width:100%; height:100%; display:block;}
   video#cam{position:absolute; width:2px; height:2px; opacity:0; pointer-events:none; left:0; top:0;}
 
   .panel{position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center;
     text-align:center; gap:14px; padding:24px; z-index:10;
     background:radial-gradient(120% 100% at 50% 0%, rgba(255,255,255,.06), transparent 60%), rgba(10,14,26,.72);}
-  #panelStart{background:#1a1030;}
+  #panelStart{background:#241241; justify-content:flex-start; padding-top:7%;}
   #titleArt{position:absolute; inset:0; width:100%; height:100%; display:block; z-index:0;}
   #panelStart > *:not(#titleArt){position:relative; z-index:1;}
   .hidden{display:none !important;}
 
-  .title{font-family:'Mochiy Pop One',sans-serif; color:#fff; font-size:clamp(30px,6.4vw,58px); line-height:1.15;
+  /* 練習中：ゲーム画面が透けて見える、画面下の軽量バー */
+  .overlayBar{position:absolute; left:50%; bottom:18px; transform:translateX(-50%); z-index:10;
+    display:flex; flex-direction:column; align-items:center; gap:10px;
+    background:rgba(10,14,26,.62); backdrop-filter:blur(2px);
+    padding:14px 22px; border-radius:20px; max-width:92%;
+    box-shadow:0 8px 24px rgba(0,0,0,.35);}
+
+  .title{font-family:'Mochiy Pop One',sans-serif; color:#fff; font-size:clamp(60px,12.8vw,116px); line-height:1.15;
     text-shadow:0 4px 0 var(--pink-dark), 0 8px 18px rgba(0,0,0,.5); letter-spacing:1px;}
   .title small{display:block; font-family:'M PLUS Rounded 1c',sans-serif; font-weight:700; font-size:0.32em; color:var(--yellow);
     margin-top:6px; text-shadow:0 2px 0 rgba(0,0,0,.4);}
@@ -77,6 +84,12 @@
   #camMini{position:absolute; top:10px; right:10px; width:110px; height:82px; border-radius:12px; overflow:hidden;
     border:3px solid rgba(255,255,255,.85); box-shadow:0 4px 10px rgba(0,0,0,.35); opacity:.92;}
   #camMini canvas{width:100%; height:100%; transform:scaleX(-1); display:block;}
+  #timeLeft{position:absolute; top:26px; left:50%; transform:translateX(-50%); z-index:6;
+    font-family:'Mochiy Pop One',sans-serif; font-size:15px; color:#fff;
+    background:rgba(10,14,26,.55); padding:3px 14px; border-radius:20px;
+    text-shadow:0 2px 4px rgba(0,0,0,.4);}
+  #timeLeft.urgent{color:var(--pink); animation:pulseTime .5s infinite;}
+  @keyframes pulseTime{0%,100%{transform:translateX(-50%) scale(1);} 50%{transform:translateX(-50%) scale(1.15);}}
   #fallbackHint{position:absolute; bottom:8px; left:50%; transform:translateX(-50%); color:#fff; font-size:11.5px;
     font-weight:700; background:rgba(0,0,0,.35); padding:4px 12px; border-radius:20px; opacity:0; transition:opacity .3s; text-align:center;}
   #fallbackHint.show{opacity:1;}
@@ -105,25 +118,37 @@
 
     <div id="hud">
       <div id="beat"></div>
+      <div id="timeLeft" class="hidden">60</div>
       <div id="camMini" class="hidden"><canvas id="camMiniCv"></canvas></div>
       <div id="fallbackHint">📷が使えない場合：タップ / スペースキー（P1）・Enterキー（P2）でジャンプ！</div>
     </div>
 
-    <!-- START -->
+    <!-- START: モード選択 -->
     <div id="panelStart" class="panel">
       <canvas id="titleArt"></canvas>
-      <div class="title">ケロジャンプ！<small>～ 顔を縦に揺らして跳べ ～</small></div>
-      <div class="camBox">
-        <canvas id="startCamCv"></canvas>
-        <div class="tag">🐸 CAM</div>
-        <div id="startCamMsg" class="msg">遊び方を選んでね</div>
-      </div>
-      <div class="howto" id="howtoText">顔を <b>ピョコッ</b> と上に動かすとカエルがジャンプ！ 動きが速いほど高く跳ぶ。ビートに乗ってトゲを避けよう！ たまに出る<b>トランポリン</b>に乗ると自動で大ジャンプ、その先の大きなトゲの壁を飛び越えられるよ！</div>
+      <div class="title">ケロジャンプ！<small>～ きみは もっと跳べる ～</small></div>
+      <div class="howto">まずは遊び方を選んでね</div>
       <div class="btnRow">
         <button id="btnStart1P" class="bigBtn wide">🐸 ひとりであそぶ</button>
         <button id="btnStart2P" class="bigBtn alt wide">🐸🐸 ふたりで対戦</button>
       </div>
+    </div>
+
+    <!-- SETUP: カメラ起動・顔認識準備 -->
+    <div id="panelSetup" class="panel hidden">
+      <div class="title" style="font-size:clamp(24px,5vw,38px)">じゅんび中…</div>
+      <div class="camBox">
+        <canvas id="startCamCv"></canvas>
+        <div class="tag">🐸 CAM</div>
+        <div id="startCamMsg" class="msg">カメラを準備中...</div>
+      </div>
       <div id="errBox" class="errBox hidden"></div>
+    </div>
+
+    <!-- PRACTICE: スタート地点で練習（ゲーム画面が透けて見える軽いバー） -->
+    <div id="panelPractice" class="overlayBar hidden">
+      <div class="howto" id="howtoText" style="font-size:12.5px; max-width:640px;">顔を <b>ピョコッ</b> と上に動かしてジャンプの練習をしてみよう！ 動きが速いほど高く跳ぶよ。準備ができたらスタート！</div>
+      <button id="btnRaceStart" class="bigBtn wide">スタート！</button>
     </div>
 
     <!-- COUNTDOWN -->
@@ -133,7 +158,7 @@
 
     <!-- GAME OVER -->
     <div id="panelOver" class="panel hidden">
-      <div class="title" style="font-size:clamp(28px,5.6vw,44px)">ドテッ！！</div>
+      <div class="title" id="overTitle" style="font-size:clamp(20px,4.4vw,36px); max-width:92%; margin:0 auto;">ドテッ！！</div>
 
       <div id="overSingle" class="howto" style="font-size:16px">
         スコア <b><span id="finalScore">0</span></b><br>ベスト <b><span id="bestScore">0</span></b>
@@ -145,6 +170,7 @@
           <div class="resultCard p1"><div class="who">P1</div><div class="num" id="scoreP1">0</div></div>
           <div class="resultCard p2"><div class="who">P2</div><div class="num" id="scoreP2">0</div></div>
         </div>
+        <div id="praiseLine" class="howto" style="font-size:13px; margin-top:6px;"></div>
       </div>
 
       <button id="btnRetry" class="bigBtn">もう一回！</button>
@@ -182,16 +208,19 @@ window.addEventListener('resize', resize);
 resize();
 
 // ---------- state ----------
-const STATE = { START:'start', COUNT:'count', PLAY:'play', OVER:'over' };
+const STATE = { START:'start', SETUP:'setup', PRACTICE:'practice', COUNT:'count', PLAY:'play', OVER:'over' };
 let state = STATE.START;
 let mode = 1; // 1 or 2
 
 // ---------- DOM refs ----------
 const panelStart = document.getElementById('panelStart');
+const panelSetup = document.getElementById('panelSetup');
+const panelPractice = document.getElementById('panelPractice');
 const panelCount = document.getElementById('panelCount');
 const panelOver  = document.getElementById('panelOver');
 const btnStart1P = document.getElementById('btnStart1P');
 const btnStart2P = document.getElementById('btnStart2P');
+const btnRaceStart = document.getElementById('btnRaceStart');
 const btnRetry   = document.getElementById('btnRetry');
 const btnMenu    = document.getElementById('btnMenu');
 const countNum   = document.getElementById('countNum');
@@ -199,6 +228,7 @@ const errBox     = document.getElementById('errBox');
 const startCamMsg= document.getElementById('startCamMsg');
 const howtoText  = document.getElementById('howtoText');
 const beatDot    = document.getElementById('beat');
+const timeLeftEl = document.getElementById('timeLeft');
 const camMini    = document.getElementById('camMini');
 const fallbackHint = document.getElementById('fallbackHint');
 const video = document.getElementById('cam');
@@ -218,6 +248,8 @@ window.addEventListener('resize', resizeTitleArt);
 const overSingle = document.getElementById('overSingle');
 const overDuel   = document.getElementById('overDuel');
 const winnerLine = document.getElementById('winnerLine');
+const praiseLine = document.getElementById('praiseLine');
+const overTitle  = document.getElementById('overTitle');
 
 // ============================================================
 // AUDIO — 全て Web Audio API で内製（サンプル音源不使用）
@@ -238,6 +270,59 @@ function playKick(strong){
   g.gain.exponentialRampToValueAtTime(0.0001, t+0.22);
   o.connect(g); g.connect(master());
   o.start(t); o.stop(t+0.24);
+}
+// カエルの歌をモチーフにしたメロディ（4フレーズ×2回、輪唱のように後から重なる）
+const PHRASE1 = [261.63,293.66,329.63,349.23,329.63,293.66,261.63,null]; // ド レ ミ フ ミ レ ド 休
+const PHRASE2 = [329.63,349.23,392.00,440.00,392.00,349.23,329.63,null]; // ミ フ ソ ラ ソ フ ミ 休
+const PHRASE3 = [392.00,392.00,493.88,523.25,493.88,392.00,392.00,null]; // ソ ソ シ ド シ ソ ソ 休
+const PHRASE4 = [523.25,587.33,659.25,698.46,659.25,587.33,523.25,null]; // ド レ ミ フ ミ レ ド（1オクターブ上）休
+const FULL_MELODY = [
+  ...PHRASE1, ...PHRASE1,
+  ...PHRASE2, ...PHRASE2,
+  ...PHRASE3, ...PHRASE3,
+  ...PHRASE4, ...PHRASE4,
+];
+const CANON_OFFSET = 8; // 1フレーズ分遅れて追いかける輪唱パート
+let melodyStep = 0;
+
+function playMelodyNote(freq, dur, volScale){
+  if(!actx) return;
+  volScale = volScale===undefined ? 1 : volScale;
+  const t = actx.currentTime;
+
+  // リード：デチューンした2声のこぎり波（EDMスーパーソウ風）
+  [-7,7].forEach(detune=>{
+    const o = actx.createOscillator(); const g = actx.createGain();
+    o.type = 'sawtooth'; o.frequency.value = freq; o.detune.value = detune;
+    const f = actx.createBiquadFilter(); f.type='lowpass'; f.frequency.value=3400;
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(0.10*volScale, t+0.012);
+    g.gain.exponentialRampToValueAtTime(0.0001, t+dur);
+    o.connect(f); f.connect(g); g.connect(master());
+    o.start(t); o.stop(t+dur+0.02);
+  });
+
+  // サブベース：1オクターブ下でEDMらしい低音の厚みを出す
+  const b = actx.createOscillator(); const bg = actx.createGain();
+  b.type='sine'; b.frequency.value = freq/2;
+  bg.gain.setValueAtTime(0.0001, t);
+  bg.gain.linearRampToValueAtTime(0.20*volScale, t+0.01);
+  bg.gain.exponentialRampToValueAtTime(0.0001, t+dur*0.9);
+  b.connect(bg); bg.connect(master());
+  b.start(t); b.stop(t+dur);
+}
+// 輪唱のエコー声部（1フレーズ遅れて追いかける、柔らかい音色）
+function playEchoNote(freq, dur){
+  if(!actx) return;
+  const t = actx.currentTime;
+  const o = actx.createOscillator(); const g = actx.createGain();
+  o.type = 'triangle'; o.frequency.value = freq;
+  const f = actx.createBiquadFilter(); f.type='lowpass'; f.frequency.value=2200;
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.linearRampToValueAtTime(0.09, t+0.02);
+  g.gain.exponentialRampToValueAtTime(0.0001, t+dur*1.1);
+  o.connect(f); f.connect(g); g.connect(master());
+  o.start(t); o.stop(t+dur*1.1+0.02);
 }
 function playHat(){
   if(!actx) return;
@@ -518,110 +603,71 @@ function drawTitleArt(t){
   const rect = panelStart.getBoundingClientRect();
   const W = rect.width, H = rect.height;
   if(W<=0 || H<=0) return;
-  if(titleArtCv.width !== Math.round(W*Math.min(window.devicePixelRatio||1,2))) resizeTitleArt();
+  const dpr = Math.min(window.devicePixelRatio||1, 2);
+  if(titleArtCv.width !== Math.round(W*dpr) || titleArtCv.height !== Math.round(H*dpr)) resizeTitleArt();
   const g = titleArtCtx;
   g.clearRect(0,0,W,H);
 
-  // 1) ダイナミックな空（中心から発光するグラデーション）
-  const cx = W*0.52, glowY = H*0.33;
-  const sky = g.createRadialGradient(cx,glowY,10, cx,glowY, Math.max(W,H)*0.85);
-  sky.addColorStop(0,'#fff3c4');
-  sky.addColorStop(0.22,'#ffb84d');
-  sky.addColorStop(0.5,'#ff6fa8');
-  sky.addColorStop(1,'#241241');
+  // 1) 明るい空が画面いっぱいに広がる
+  const sky = g.createLinearGradient(0,0,0,H);
+  sky.addColorStop(0,'#7fe0ff');
+  sky.addColorStop(0.55,'#bdf3ff');
+  sky.addColorStop(1,'#eafff0');
   g.fillStyle = sky; g.fillRect(0,0,W,H);
 
-  // 2) 回転する放射スピードライン
-  g.save();
-  g.translate(cx,glowY);
-  g.rotate(t*0.06);
-  const rays = 20;
-  for(let i=0;i<rays;i++){
-    g.save();
-    g.rotate((i/rays)*Math.PI*2);
-    g.fillStyle = i%2===0 ? 'rgba(255,255,255,.11)' : 'rgba(255,255,255,.04)';
+  // 2) 太陽
+  g.fillStyle = '#ffe86b';
+  g.beginPath(); g.arc(W*0.80, H*0.16, Math.min(W,H)*0.09, 0, Math.PI*2); g.fill();
+  g.fillStyle = 'rgba(255,232,107,.35)';
+  g.beginPath(); g.arc(W*0.80, H*0.16, Math.min(W,H)*0.14, 0, Math.PI*2); g.fill();
+
+  // 3) ふわふわ浮かぶ雲（ゆっくり流れる）
+  g.fillStyle = 'rgba(255,255,255,.9)';
+  const clouds = [
+    {x:0.12, y:0.20, r:0.055, s:0.006},
+    {x:0.42, y:0.12, r:0.04,  s:0.004},
+    {x:0.65, y:0.30, r:0.05,  s:0.005},
+    {x:0.90, y:0.42, r:0.045, s:0.007},
+    {x:0.24, y:0.40, r:0.035, s:0.0035},
+  ];
+  clouds.forEach((c,i)=>{
+    const cxp = ((c.x + t*c.s) % 1.2 - 0.1) * W;
+    const cyp = c.y*H, r = c.r*Math.min(W,H);
     g.beginPath();
-    g.moveTo(0,0);
-    g.arc(0,0, Math.max(W,H)*1.2, 0, (Math.PI*2/rays)*0.5);
-    g.closePath(); g.fill();
-    g.restore();
-  }
-  g.restore();
-
-  // 3) 遠近感のあるコース（奥の消失点に向かって収束）
-  const trackTopY = H*0.40, trackBottomY = H*1.06;
-  const topHalfW = W*0.05, bottomHalfW = W*0.7;
-  const trackGrad = g.createLinearGradient(0,trackTopY,0,trackBottomY);
-  trackGrad.addColorStop(0,'#6fc24a'); trackGrad.addColorStop(1,'#4a9a34');
-  g.fillStyle = trackGrad;
-  g.beginPath();
-  g.moveTo(cx-topHalfW, trackTopY);
-  g.lineTo(cx+topHalfW, trackTopY);
-  g.lineTo(cx+bottomHalfW, trackBottomY);
-  g.lineTo(cx-bottomHalfW, trackBottomY);
-  g.closePath(); g.fill();
-
-  // 中央の収束レーンライン（流れる点線）
-  g.strokeStyle = 'rgba(255,255,255,.55)'; g.lineWidth = 3;
-  g.setLineDash([16,16]); g.lineDashOffset = -t*50;
-  g.beginPath(); g.moveTo(cx,trackTopY); g.lineTo(cx,trackBottomY); g.stroke();
-  g.setLineDash([]);
-
-  // 手前のチェッカー柄スタートライン
-  const checkY = trackBottomY - H*0.1, checkH = H*0.05;
-  const checkHalfW = bottomHalfW*0.94, cols = 16;
-  for(let i=0;i<cols;i++){
-    const x0 = cx-checkHalfW + (checkHalfW*2/cols)*i;
-    const x1 = x0 + (checkHalfW*2/cols);
-    g.fillStyle = (i%2===0) ? '#ffffff' : '#20232b';
-    g.fillRect(x0, checkY, x1-x0, checkH);
-  }
-
-  // 中景の小さな「ケロジャンプレース」バナー
-  const bx = cx, byBase = trackTopY + (checkY-trackTopY)*0.42;
-  const poleH = H*0.07, poleGap = W*0.05;
-  g.strokeStyle = '#8a5a2c'; g.lineWidth = 3;
-  [bx-poleGap, bx+poleGap].forEach(px=>{
-    g.beginPath(); g.moveTo(px, byBase+poleH); g.lineTo(px, byBase); g.stroke();
+    g.ellipse(cxp, cyp, r, r*0.6, 0, 0, Math.PI*2);
+    g.ellipse(cxp+r*0.7, cyp+r*0.1, r*0.7, r*0.48, 0, 0, Math.PI*2);
+    g.ellipse(cxp-r*0.65, cyp+r*0.12, r*0.6, r*0.42, 0, 0, Math.PI*2);
+    g.fill();
   });
-  g.fillStyle = '#ff5fa2';
-  g.beginPath();
-  g.moveTo(bx-poleGap, byBase); g.lineTo(bx+poleGap, byBase);
-  g.lineTo(bx+poleGap, byBase+poleH*0.42); g.lineTo(bx-poleGap, byBase+poleH*0.42);
-  g.closePath(); g.fill();
-  g.fillStyle='#fff'; g.textAlign='center';
-  g.font = `900 ${Math.max(9,poleH*0.3)}px 'Mochiy Pop One', sans-serif`;
-  g.fillText('ケロジャンプレース', bx, byBase+poleH*0.3);
 
-  // 4) 手前・主役のケロちゃん（大きく傾けてダイナミックに）
+  // 4) 遠くの丘（奥行きを少しだけ）
+  g.fillStyle = '#bdeea0';
+  g.beginPath();
+  g.ellipse(W*0.2, H*0.78, W*0.32, H*0.12, 0, Math.PI, 0);
+  g.fill();
+  g.beginPath();
+  g.ellipse(W*0.82, H*0.82, W*0.4, H*0.14, 0, Math.PI, 0);
+  g.fill();
+
+  // 5) 画面下のほうに、大きなケロビートくん
   if(keroImgGreen.complete && keroImgGreen.naturalWidth>0){
-    const kw = W*0.38, kh = kw*KERO_IMG_ASPECT;
-    const kx = W*0.5, ky = H*0.93;
+    const kw = W*0.5, kh = kw*KERO_IMG_ASPECT;
+    const kx = W*0.5, ky = H*1.06 + Math.sin(t*1.1)*H*0.006;
     g.save();
     g.translate(kx,ky);
-    g.rotate(-0.13 + Math.sin(t*0.9)*0.02);
 
-    // モーションライン
-    g.strokeStyle = 'rgba(255,255,255,.55)'; g.lineWidth = Math.max(2,kw*0.02); g.lineCap='round';
-    for(let i=0;i<5;i++){
-      const yy = -kh*0.32 + i*kh*0.15;
-      g.beginPath(); g.moveTo(-kw*0.95,yy); g.lineTo(-kw*0.55,yy); g.stroke();
-    }
     // 接地影
-    g.fillStyle = 'rgba(0,0,0,.28)';
-    g.beginPath(); g.ellipse(0, kh*0.05, kw*0.4, kw*0.11, 0,0,Math.PI*2); g.fill();
+    g.fillStyle = 'rgba(0,0,0,.20)';
+    g.beginPath(); g.ellipse(0, -kh*0.02, kw*0.42, kw*0.1, 0,0,Math.PI*2); g.fill();
 
-    g.drawImage(keroImgGreen, -kw/2, -kh*0.62, kw, kh);
+    g.drawImage(keroImgGreen, -kw/2, -kh*0.86, kw, kh);
     g.restore();
   }
 
-  // 5) 上下に可読性用の暗いグラデーション
-  const topScrim = g.createLinearGradient(0,0,0,H*0.3);
-  topScrim.addColorStop(0,'rgba(8,6,20,.6)'); topScrim.addColorStop(1,'rgba(8,6,20,0)');
-  g.fillStyle = topScrim; g.fillRect(0,0,W,H*0.3);
-  const botScrim = g.createLinearGradient(0,H*0.6,0,H);
-  botScrim.addColorStop(0,'rgba(8,6,20,0)'); botScrim.addColorStop(1,'rgba(8,6,20,.7)');
-  g.fillStyle = botScrim; g.fillRect(0,H*0.6,W,H*0.4);
+  // 6) 上に少しだけ、タイトル文字の可読性用グラデーション
+  const topScrim = g.createLinearGradient(0,0,0,H*0.22);
+  topScrim.addColorStop(0,'rgba(255,255,255,.25)'); topScrim.addColorStop(1,'rgba(255,255,255,0)');
+  g.fillStyle = topScrim; g.fillRect(0,0,W,H*0.22);
 }
 
 // ============================================================
@@ -639,10 +685,13 @@ const OBSTACLE_TYPES = [
 ];
 const TRAMPOLINE_TYPE = { id:'trampoline', w:92, h:16, color:'#ffcf3f', dark:'#c98f10' };
 const BIGSPIKE_TYPE   = { id:'bigspike', w:260, h:56, color:'#e34b4b', dark:'#a12c2c' };
+const GOAL_TYPE        = { id:'goal', w:84, h:210, color:'#ffd23f', dark:'#c98f10' };
 const TRAMPOLINE_TO_BIGSPIKE_GAP = 130; // トランポリンから大トゲまでの距離(px, 1P基準)
 
 let players = [];
 let playStartGrace = 0; // プレイ開始直後、顔トラッキング初期化の誤検知でジャンプしないようにする猶予時間
+const TIME_LIMIT = 40; // ゴールまでの制限時間（秒）
+let goalSpawned = false, goalReached = false;
 let elapsed = 0, bpm = 100, beatPhase = 0, scrollSpeed = 320, beatPulse = 0;
 let bestScore1P = 0;
 let distSinceSpawn = 0, lastSpawnWidth = 0, nextGapKeros = 3;
@@ -668,6 +717,8 @@ function resetGame(){
   nextGapKeros = OBSTACLE_GAP_MIN + Math.random()*(OBSTACLE_GAP_MAX-OBSTACLE_GAP_MIN);
   comboInProgress = false; comboAcc = 0;
   nextComboTime = 10 + Math.random()*6;
+  goalSpawned = false; goalReached = false;
+  melodyStep = 0;
   players = [];
   if(mode===1){
     players.push(mkPlayer(0, 0, CH, 1, '', '#ff5fa2'));
@@ -707,6 +758,13 @@ function startTrampolineCombo(){
 function onBeat(){
   const strong = (Math.floor(elapsed*bpm/60) % 4 === 0);
   playKick(strong); if(!strong) playHat();
+  const beatDur = 60/bpm;
+  const note = FULL_MELODY[melodyStep % FULL_MELODY.length];
+  if(note !== null) playMelodyNote(note, beatDur*0.92);
+  const echoIdx = ((melodyStep - CANON_OFFSET) % FULL_MELODY.length + FULL_MELODY.length) % FULL_MELODY.length;
+  const echoNote = FULL_MELODY[echoIdx];
+  if(echoNote !== null) playEchoNote(echoNote, beatDur*0.92);
+  melodyStep++;
   beatPulse = 1;
   if(state===STATE.PLAY && players.some(p=>p.alive)){
     const keroWidthBase = 54*FROG_VISUAL_SCALE; // 1P基準でのケロちゃんの表示幅
@@ -734,7 +792,7 @@ function addBurst(p, x,y,color,n=10){
 }
 
 function tryJump(p){
-  if(state!==STATE.PLAY || !p.frog.grounded || playStartGrace>0) return;
+  if((state!==STATE.PLAY && state!==STATE.PRACTICE) || !p.frog.grounded || playStartGrace>0) return;
   const powerNorm = Math.min(1, Math.max(0, (p.face.velocity-JUMP_TRIGGER)/1.1));
   const vel = -(JUMP_BASE_V + powerNorm*JUMP_VEL_SCALE*2.1) * p.scale;
   p.frog.vy = Math.max(-JUMP_MAX_V*p.scale, vel);
@@ -743,7 +801,7 @@ function tryJump(p){
   addBurst(p, p.frog.x, groundY(p)+6*p.scale, '#ffffff', 6);
 }
 function manualJump(p){
-  if(state!==STATE.PLAY || !p.frog.grounded) return;
+  if((state!==STATE.PLAY && state!==STATE.PRACTICE) || !p.frog.grounded) return;
   p.frog.vy = -(JUMP_BASE_V + JUMP_VEL_SCALE*1.1) * p.scale * 0.5; // 高さ1/4（速度0.5倍）
   p.frog.grounded = false;
   playJump(0.7, mode===2 ? (p.idx===0?-0.4:0.4) : undefined);
@@ -785,6 +843,16 @@ function updatePlayer(p, dt){
     ob.x -= scrollSpeed*dt;
     if(ob.telegraph>0) ob.telegraph -= dt;
     if(ob.x + ob.w < -20){ p.obstacles.splice(i,1); continue; }
+
+    if(ob.type.id==='goal'){
+      if(!goalReached){
+        const obBox = { x:ob.x, y:ob.y, w:ob.w, h:ob.h };
+        const hit = frogBox.x<obBox.x+obBox.w && frogBox.x+frogBox.w>obBox.x &&
+                    frogBox.y<obBox.y+obBox.h && frogBox.y+frogBox.h>obBox.y;
+        if(hit){ triggerGoal(); return; }
+      }
+      continue;
+    }
 
     if(ob.type.id==='trampoline'){
       if(!ob.used){
@@ -836,17 +904,38 @@ function knockOut(p){
   if(players.every(pl=>!pl.alive)) finishGame();
 }
 
+// クラッシュ時、中央に表示するテキストをランダムで選ぶ（ハイスコア更新でない場合）
+const DOTE_TEXTS = [
+  '消費カロリーは　多分200kだケロ！',
+  'ナイスファイトだケロ',
+  '今日もいい日だケロ',
+  'ケロ占い　今日は大吉ケロ！',
+  '才能を感じるケロ',
+  'ケロケロ',
+  'もう一回遊んでもいいケロよ',
+  'コンティニューケロ？',
+];
+function pickDoteText(){
+  return DOTE_TEXTS[Math.floor(Math.random()*DOTE_TEXTS.length)];
+}
+
 function finishGame(){
   state = STATE.OVER;
+  timeLeftEl.classList.add('hidden');
+  praiseLine.textContent = '';
   if(mode===1){
-    bestScore1P = Math.max(bestScore1P, Math.floor(players[0].score));
+    const finalScore = Math.floor(players[0].score);
+    const isNewRecord = finalScore > bestScore1P;
+    bestScore1P = Math.max(bestScore1P, finalScore);
+    overTitle.textContent = isNewRecord ? 'ハイスコア更新！' : pickDoteText();
     setTimeout(()=>{
       overSingle.classList.remove('hidden'); overDuel.classList.add('hidden');
-      document.getElementById('finalScore').textContent = Math.floor(players[0].score);
+      document.getElementById('finalScore').textContent = finalScore;
       document.getElementById('bestScore').textContent = bestScore1P;
       panelOver.classList.remove('hidden');
     }, 650);
   } else {
+    overTitle.textContent = 'しょうぶあり！';
     const s1 = Math.floor(players[0].score), s2 = Math.floor(players[1].score);
     setTimeout(()=>{
       overSingle.classList.add('hidden'); overDuel.classList.remove('hidden');
@@ -860,11 +949,77 @@ function finishGame(){
   }
 }
 
+// 1分の制限時間に到達 → ゴール。勝者を祝い、敗者は勝者をたたえる
+function triggerGoal(){
+  if(goalReached) return;
+  goalReached = true;
+  state = STATE.OVER;
+  timeLeftEl.classList.add('hidden');
+  players.forEach(p=>{ p.frog.vy = 0; });
+  playFanfare();
+  shake = Math.max(shake, 0.4);
+
+  if(mode===1){
+    const finalScore = Math.floor(players[0].score);
+    const isNewRecord = finalScore > bestScore1P;
+    bestScore1P = Math.max(bestScore1P, finalScore);
+    overTitle.textContent = isNewRecord ? 'ハイスコア更新！' : 'ゴール！！';
+    addPop(players[0], 'ゴール！やったね！', players[0].frog.x, players[0].frog.y-90, '#ffd23f');
+    setTimeout(()=>{
+      overSingle.classList.remove('hidden'); overDuel.classList.add('hidden');
+      document.getElementById('finalScore').textContent = finalScore;
+      document.getElementById('bestScore').textContent = bestScore1P;
+      panelOver.classList.remove('hidden');
+    }, 650);
+  } else {
+    overTitle.textContent = 'ゴール！！';
+    const s1 = Math.floor(players[0].score), s2 = Math.floor(players[1].score);
+    setTimeout(()=>{
+      overSingle.classList.add('hidden'); overDuel.classList.remove('hidden');
+      document.getElementById('scoreP1').textContent = s1;
+      document.getElementById('scoreP2').textContent = s2;
+      if(s1===s2){
+        winnerLine.textContent = 'ひきわけ！！';
+        praiseLine.textContent = 'ふたりとも よくがんばった！ケロッ♪';
+      } else {
+        const winner = s1>s2 ? 'P1' : 'P2';
+        const loser = winner==='P1' ? 'P2' : 'P1';
+        winnerLine.textContent = winner + 'の　しょうり！！🏆';
+        praiseLine.textContent = loser + '「' + winner + '、すごいケロ！おめでとう！」';
+      }
+      panelOver.classList.remove('hidden');
+    }, 650);
+  }
+}
+
 function update(dt){
+  if(state===STATE.PRACTICE){
+    players.forEach(p=> updatePlayer(p, dt));
+    return;
+  }
   elapsed += dt;
   playStartGrace = Math.max(0, playStartGrace-dt);
+
   bpm = 100 + Math.min(60, elapsed*0.9);
   scrollSpeed = 320 * (bpm/100);
+
+  const remain = Math.max(0, TIME_LIMIT-elapsed);
+  timeLeftEl.textContent = Math.ceil(remain)+'びょう';
+  timeLeftEl.classList.toggle('urgent', remain<=10);
+
+  // ゴールバナーを、ちょうど制限時間あたりにケロちゃんへ到達するタイミングで出現させる
+  if(!goalSpawned){
+    const distToFrog = CW*0.82 + 80;
+    const timeToArrive = distToFrog/scrollSpeed;
+    if(elapsed + timeToArrive >= TIME_LIMIT){
+      spawnObstacle(GOAL_TYPE);
+      goalSpawned = true;
+      distSinceSpawn = 0; lastSpawnWidth = GOAL_TYPE.w;
+    }
+  }
+  // 万が一バナーに触れられなかった場合の保険（制限時間+8秒で強制ゴール）
+  if(!goalReached && elapsed >= TIME_LIMIT+8){ triggerGoal(); return; }
+
   distSinceSpawn += scrollSpeed*dt;
   if(comboInProgress){
     comboAcc += scrollSpeed*dt;
@@ -1108,6 +1263,32 @@ function drawObstacle(p, ob){
         ctx.stroke();
       }
     }
+  } else if(t.id==='goal'){
+    // 2本のポールと、チェッカー柄のゴールテープ
+    const poleW = 4*p.scale;
+    ctx.fillStyle = '#8a5a2c';
+    ctx.fillRect(0, 0, poleW, ob.h);
+    ctx.fillRect(ob.w-poleW, 0, poleW, ob.h);
+    const tapeY = ob.h*0.18, tapeH = ob.h*0.16, cols = 6, cw = ob.w/cols;
+    for(let i=0;i<cols;i++){
+      ctx.fillStyle = (i%2===0) ? '#ffffff' : '#20232b';
+      ctx.fillRect(i*cw, tapeY, cw, tapeH);
+    }
+    ctx.save();
+    ctx.translate(ob.w/2, tapeY+tapeH/2);
+    ctx.rotate(Math.sin(elapsed*3)*0.05);
+    ctx.fillStyle = '#ff5fa2';
+    ctx.font = `900 ${Math.max(9,tapeH*0.62)}px 'Mochiy Pop One', sans-serif`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.lineWidth = 3*p.scale; ctx.strokeStyle='rgba(0,0,0,.3)';
+    ctx.strokeText('GOAL', 0, 1);
+    ctx.fillText('GOAL', 0, 1);
+    ctx.restore();
+    ctx.fillStyle = '#ffd23f';
+    for(const py of [0, ob.h]){
+      ctx.beginPath(); ctx.arc(poleW/2, py, poleW*1.3, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(ob.w-poleW/2, py, poleW*1.3, 0, Math.PI*2); ctx.fill();
+    }
   }
   ctx.restore();
 }
@@ -1204,10 +1385,11 @@ function loop(now){
 
   if(faceReady && !useFallback) detectFace(now);
   shake = Math.max(0, shake-dt*3);
-  if(state===STATE.PLAY) update(dt);
+  if(state===STATE.PLAY || state===STATE.PRACTICE) update(dt);
   if(players.length) render();
 
-  if(panelStart && !panelStart.classList.contains('hidden')){ drawTitleArt(animTime); drawCamPreview(startCamCv); }
+  if(panelStart && !panelStart.classList.contains('hidden')) drawTitleArt(animTime);
+  if(panelSetup && !panelSetup.classList.contains('hidden')) drawCamPreview(startCamCv);
   if(!camMini.classList.contains('hidden')) drawCamPreview(camMiniCv);
 }
 requestAnimationFrame(loop);
@@ -1215,29 +1397,44 @@ requestAnimationFrame(loop);
 // ============================================================
 // FLOW CONTROL
 // ============================================================
-async function beginFlow(selectedMode){
+async function chooseMode(selectedMode){
   mode = selectedMode;
   ensureAudio();
   errBox.classList.add('hidden');
-  [btnStart1P, btnStart2P].forEach(b=> b.disabled = true);
+  panelStart.classList.add('hidden');
+  panelSetup.classList.remove('hidden');
   startCamMsg.textContent = '準備中...';
   if((!faceReady || initializedNumFaces < mode) && !useFallback){ await initFace(mode); }
-  [btnStart1P, btnStart2P].forEach(b=> b.disabled = false);
   if(!useFallback){ camMini.classList.remove('hidden'); }
+  panelSetup.classList.add('hidden');
+  enterPractice();
+}
+btnStart1P.addEventListener('click', ()=> chooseMode(1));
+btnStart2P.addEventListener('click', ()=> chooseMode(2));
+
+function enterPractice(){
+  resetGame();
+  scrollSpeed = 0; // 練習中はコースが流れないよう静止させる
+  state = STATE.PRACTICE;
   howtoText.className = 'howto' + (mode===2?' two':'');
   howtoText.innerHTML = mode===2
-    ? '横に並んでカメラに顔を映してね。<b>左の人がP1（上のレーン）</b>、<b>右の人がP2（下のレーン）</b>！ 顔を上に動かして相手より長く生き残ろう！'
-    : '顔を <b>ピョコッ</b> と上に動かすとジャンプ！ 動きが速いほど高く跳ぶよ。';
-  startCountdown();
+    ? '横に並んでカメラに顔を映してね。<b>左の人がP1（上のレーン）</b>、<b>右の人がP2（下のレーン）</b>！ まずはジャンプの練習をしてみよう。'
+    : '顔を <b>ピョコッ</b> と上に動かすとジャンプ！ 動きが速いほど高く跳ぶよ。まずは練習してみよう。';
+  panelPractice.classList.remove('hidden');
 }
-btnStart1P.addEventListener('click', ()=> beginFlow(1));
-btnStart2P.addEventListener('click', ()=> beginFlow(2));
+btnRaceStart.addEventListener('click', ()=>{ panelPractice.classList.add('hidden'); startCountdown(); });
 
 btnRetry.addEventListener('click', ()=>{ panelOver.classList.add('hidden'); startCountdown(); });
-btnMenu.addEventListener('click', ()=>{ panelOver.classList.add('hidden'); panelStart.classList.remove('hidden'); state = STATE.START; });
+btnMenu.addEventListener('click', ()=>{
+  panelOver.classList.add('hidden'); panelPractice.classList.add('hidden'); panelSetup.classList.add('hidden');
+  panelStart.classList.remove('hidden'); state = STATE.START;
+  timeLeftEl.classList.add('hidden');
+});
 
 function startCountdown(){
   panelStart.classList.add('hidden');
+  panelSetup.classList.add('hidden');
+  panelPractice.classList.add('hidden');
   panelOver.classList.add('hidden');
   resetGame();
   state = STATE.COUNT;
@@ -1249,6 +1446,7 @@ function startCountdown(){
     if(n>0){ countNum.textContent = n; playHat(); }
     else if(n===0){ countNum.textContent = 'GO!'; playKick(true); }
     else { clearInterval(iv); document.getElementById('panelCount').classList.add('hidden'); state = STATE.PLAY; playStartGrace = 0.4;
+      timeLeftEl.classList.remove('hidden'); timeLeftEl.classList.remove('urgent');
       players.forEach(p=>{
         // 顔トラッキングの基準値を「今の実際の顔位置」で初期化し、初期化直後の誤検知ジャンプを防ぐ
         let sample = null;
@@ -1277,7 +1475,6 @@ stage.addEventListener('pointerdown', (e)=>{
   manualJump(relY < 0.5 ? players[0] : players[1]);
 });
 
-// PWA: サービスワーカー登録（対応環境のみ、失敗しても通常プレイに影響しない）
 if('serviceWorker' in navigator){
   window.addEventListener('load', ()=>{
     navigator.serviceWorker.register('sw.js').catch(err=>console.warn('SW registration failed', err));
