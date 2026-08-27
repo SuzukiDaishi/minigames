@@ -4,6 +4,7 @@
    ・戻るボタン（全ゲーム共通のデザイン／プレイ中は確認）
    ・カメラ取得の一本化
        - ページ内では stream をシングルトンで使い回す（2回目のプロンプトを出さない）
+       - ゲーム一覧内では親画面の stream を全ゲームで共有する
        - 許可された事実を localStorage に残す（同一オリジンなので他のゲームからも読める）
    ・カメラが使えないときの Safari 設定手順の案内
    すべてのゲームは <script type="module"> なので import して使う。
@@ -81,6 +82,16 @@ const DEFAULT_CONSTRAINTS = {
 
 let currentStream = null;
 let pending = null;
+let borrowedFromHost = false;
+
+function cameraHost() {
+  try {
+    if (window.parent !== window && window.parent.__MINIGAMES_CAMERA__) {
+      return window.parent.__MINIGAMES_CAMERA__;
+    }
+  } catch (e) { /* 別オリジンの親画面には触れない */ }
+  return null;
+}
 
 function rememberGranted() {
   try { localStorage.setItem(LS_CAMERA, 'granted'); } catch (e) {}
@@ -106,8 +117,8 @@ export async function cameraState() {
 }
 
 /**
- * カメラを取得する。ページ内では 1 本の stream を使い回すので、
- * 同じページから何度呼んでも許可を聞かれるのは最初の 1 回だけ。
+ * カメラを取得する。ページ内、またはゲーム一覧の同一起動中は
+ * 1 本の stream を使い回すので、許可を聞かれるのは最初の 1 回だけ。
  */
 export function requestCamera(constraints = DEFAULT_CONSTRAINTS) {
   if (currentStream && currentStream.getTracks().some(t => t.readyState === 'live')) {
@@ -115,13 +126,21 @@ export function requestCamera(constraints = DEFAULT_CONSTRAINTS) {
   }
   if (pending) return pending;
 
-  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+  const host = cameraHost();
+  if (!host && (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia)) {
     const err = new Error('この環境ではカメラAPIがつかえません');
     err.unsupported = true;
     return Promise.reject(err);
   }
 
-  pending = navigator.mediaDevices.getUserMedia(constraints)
+  // ゲーム一覧の中で遊んでいるときは、親画面が保持する1本の stream を
+  // 全ゲームで共有する。Safariでゲームを替えるたびに許可確認が出るのを防ぐ。
+  borrowedFromHost = Boolean(host);
+  const streamRequest = host
+    ? host.request(constraints)
+    : navigator.mediaDevices.getUserMedia(constraints);
+
+  pending = Promise.resolve(streamRequest)
     .then(stream => {
       currentStream = stream;
       rememberGranted();
@@ -132,6 +151,7 @@ export function requestCamera(constraints = DEFAULT_CONSTRAINTS) {
         forgetGranted();
         err.denied = true;
       }
+      borrowedFromHost = false;
       throw err;
     })
     .finally(() => { pending = null; });
@@ -142,12 +162,16 @@ export function requestCamera(constraints = DEFAULT_CONSTRAINTS) {
 /** 取得済みの stream を止める（画面を離れるときなど） */
 export function releaseCamera() {
   if (!currentStream) return;
-  try { currentStream.getTracks().forEach(t => t.stop()); } catch (e) {}
+  // 親画面から借りた stream は、次のゲームでも使うため止めない。
+  if (!borrowedFromHost) {
+    try { currentStream.getTracks().forEach(t => t.stop()); } catch (e) {}
+  }
   currentStream = null;
+  borrowedFromHost = false;
 }
 
-// ページを離れるときはカメラを止める（撮影中インジケータをすぐ消す）。
-// ただし bfcache から復帰したときは stream が死んでいるので読み直す。
+// 単独ページでは離脱時に停止する。ゲーム一覧から借りた stream は親画面が保持する。
+// bfcache から復帰したときは stream の状態を読み直す。
 let releasedOnHide = false;
 window.addEventListener('pagehide', () => {
   if (currentStream) { releasedOnHide = true; releaseCamera(); }
@@ -173,8 +197,8 @@ export function showCameraHelp() {
       </ol>
       <p class="mg-note">
         ぜんぶ拒否になっているときは、iPad/iPhone の <b>設定 → Safari → カメラ</b> も「確認」または「許可」にしてね。<br>
-        ホーム画面に追加したアプリでは、<b>1回 許可すれば そのアプリの中の ぜんぶのゲームで共通</b>になるよ。
-        （一覧のページをホーム画面に追加するのがおすすめ）
+        ゲーム一覧から遊ぶと、<b>同じ起動中は1本のカメラをぜんぶのゲームで共通</b>に使うよ。<br>
+        Safariを閉じたあとも確認を出さない設定にするには、このサイトのカメラを<b>「許可」</b>にしてね。
       </p>
       <div class="mg-row"><button class="mg-btn" type="button">とじる</button></div>
     </div>`;
@@ -248,7 +272,12 @@ export function mountHomeButton(opts = {}) {
   el.setAttribute('aria-label', 'ゲーム一覧にもどる');
   if (!el.title) el.title = 'ゲーム一覧にもどる';
 
-  const go = () => { releaseCamera(); location.href = href; };
+  const go = () => {
+    const host = cameraHost();
+    releaseCamera();
+    if (host && typeof host.showHome === 'function') host.showHome();
+    else location.href = href;
+  };
 
   el.addEventListener('click', async (e) => {
     e.preventDefault();
